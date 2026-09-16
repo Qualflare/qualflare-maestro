@@ -105,7 +105,7 @@ func Render(kind string, raw json.RawMessage) string {
 	if boolean(body["optional"]) || boolean(object(body["selector"])["optional"]) {
 		name += " (optional)"
 	}
-	return textutil.Truncate(name, 255)
+	return name
 }
 
 func render(kind string, body map[string]json.RawMessage) string {

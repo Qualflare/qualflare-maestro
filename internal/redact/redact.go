@@ -25,7 +25,7 @@ type Pair struct {
 
 // Redactor replaces known values. The zero value and nil redact nothing.
 type Redactor struct {
-	replacer *strings.Replacer
+	pairs []Pair
 }
 
 // New builds a redactor from variable pairs.
@@ -44,23 +44,58 @@ func New(pairs []Pair) *Redactor {
 		}
 		return kept[i].Key < kept[j].Key
 	})
-	r := &Redactor{}
-	if len(kept) > 0 {
-		replacements := make([]string, 0, len(kept)*2)
-		for _, p := range kept {
-			replacements = append(replacements, p.Value, "${"+p.Key+"}")
-		}
-		r.replacer = strings.NewReplacer(replacements...)
-	}
-	return r
+	return &Redactor{pairs: kept}
 }
 
 // String returns s with every known value replaced by ${KEY}.
 func (r *Redactor) String(s string) string {
-	if r == nil || r.replacer == nil {
+	if r == nil || len(r.pairs) == 0 {
 		return s
 	}
-	return r.replacer.Replace(s)
+
+	type claim struct {
+		start, end int
+		key        string
+	}
+	var claims []claim
+	for _, p := range r.pairs {
+		for from := 0; from <= len(s)-len(p.Value); {
+			rel := strings.Index(s[from:], p.Value)
+			if rel < 0 {
+				break
+			}
+			start := from + rel
+			end := start + len(p.Value)
+			overlaps := false
+			for _, claimed := range claims {
+				if start < claimed.end && end > claimed.start {
+					overlaps = true
+					break
+				}
+			}
+			if !overlaps {
+				claims = append(claims, claim{start: start, end: end, key: p.Key})
+			}
+			from = end
+		}
+	}
+	if len(claims) == 0 {
+		return s
+	}
+	sort.Slice(claims, func(i, j int) bool { return claims[i].start < claims[j].start })
+
+	var out strings.Builder
+	out.Grow(len(s))
+	from := 0
+	for _, claimed := range claims {
+		out.WriteString(s[from:claimed.start])
+		out.WriteString("${")
+		out.WriteString(claimed.key)
+		out.WriteByte('}')
+		from = claimed.end
+	}
+	out.WriteString(s[from:])
+	return out.String()
 }
 
 // FromEnviron returns the MAESTRO_* entries of an os.Environ()-style list.

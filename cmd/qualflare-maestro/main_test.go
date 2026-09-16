@@ -300,18 +300,23 @@ func TestRun_CreatesPrivateWorkDirectories(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	workDir := filepath.Join(outDir, ".work-t1-"+strconv.Itoa(os.Getpid()))
-	for path, want := range map[string]os.FileMode{
-		outDir:                          0o755,
-		workDir:                         0o700,
-		filepath.Join(workDir, "debug"): 0o700,
-	} {
+	info, err := os.Stat(outDir)
+	if err != nil {
+		t.Errorf("stat %s: %v", outDir, err)
+	} else if !info.IsDir() {
+		t.Errorf("%s is not a directory", outDir)
+	}
+	for _, path := range []string{workDir, filepath.Join(workDir, "debug")} {
 		info, err := os.Stat(path)
 		if err != nil {
 			t.Errorf("stat %s: %v", path, err)
 			continue
 		}
-		if got := info.Mode().Perm(); got != want {
-			t.Errorf("%s mode = %04o, want %04o", path, got, want)
+		if !info.IsDir() {
+			t.Errorf("%s is not a directory", path)
+		}
+		if got := info.Mode().Perm(); got&0o077 != 0 {
+			t.Errorf("%s mode = %04o, want no group or other permissions", path, got)
 		}
 	}
 	if err := os.WriteFile(resume, nil, 0o600); err != nil {

@@ -22,6 +22,20 @@ func TestLongerValuesAreReplacedFirst(t *testing.T) {
 	}
 }
 
+func TestLongerValuesClaimOverlappingTextFirst(t *testing.T) {
+	r := New([]Pair{{Key: "A", Value: "abcd1234-long"}, {Key: "B", Value: "xxab"}})
+	if got, want := r.String("xxabcd1234-long"), "xx${A}"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestDifferentValuesAtDisjointPositionsAreBothReplaced(t *testing.T) {
+	r := New([]Pair{{Key: "A", Value: "alpha-secret"}, {Key: "B", Value: "beta-secret"}})
+	if got, want := r.String("alpha-secret then beta-secret"), "${A} then ${B}"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
 func TestShortValuesAreNotRedacted(t *testing.T) {
 	// Replacing "1" or "on" everywhere would mangle the report.
 	r := New([]Pair{{Key: "FLAG", Value: "on"}, {Key: "N", Value: "123"}})

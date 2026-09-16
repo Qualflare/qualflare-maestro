@@ -317,6 +317,38 @@ func TestCollect_RedactsBeforeTruncatingStepErrors(t *testing.T) {
 	}
 }
 
+func TestCollect_RedactsBeforeTruncatingStepNames(t *testing.T) {
+	const secret = "hunter22-secret"
+	raw, err := json.Marshal(map[string]string{"text": strings.Repeat("x", 238) + secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := Input{
+		JUnit: &junit.Report{Suites: []junit.Suite{{
+			Name:   "S",
+			Device: "iPhone 17 - iOS 26.5 - DEVICE",
+			Cases:  []junit.Case{{Name: "F", Status: "ERROR"}},
+		}}},
+		Debug: debugdir.Result{Layout: debugdir.LayoutBundle, Flows: []debugdir.Flow{{
+			Name: "F",
+			Entries: []debugdir.Entry{{
+				Kind:   "inputTextCommand",
+				Raw:    raw,
+				Status: "FAILED",
+			}},
+		}}},
+		Redactor: redact.New([]redact.Pair{{Key: "PASSWORD", Value: secret}}),
+	}
+
+	got := caseNamed(t, Collect(in).Report, "F").Steps[0].Name
+	if strings.Contains(got, secret[:6]) {
+		t.Fatalf("step name contains partial secret %q at the truncation boundary", secret[:6])
+	}
+	if n := utf8.RuneCountInString(got); n > 255 {
+		t.Fatalf("step name is %d runes, want at most 255", n)
+	}
+}
+
 func TestCollect_UnattributedFailureWhenNothingWasReported(t *testing.T) {
 	out := Collect(Input{
 		Cfg: config.Config{Environment: "ci", Language: "en-US", RunID: "r"}, ExitCode: 1,
