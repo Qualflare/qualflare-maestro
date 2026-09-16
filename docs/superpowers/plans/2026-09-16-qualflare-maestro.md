@@ -83,7 +83,9 @@ for p in wire constants textutil version gitdetect cidetect; do
   mkdir -p "internal/$p"
   cp "$Q/internal/$p/"*.go "internal/$p/"
 done
-grep -rl 'github.com/Qualflare/qualflare-go' internal | xargs sed -i '' 's#github.com/Qualflare/qualflare-go#github.com/Qualflare/qualflare-maestro#g'
+# Rewrite import paths only. A bare search-and-replace would also rewrite test
+# data such as cidetect_test.go's expected RunURL, which must stay as copied.
+grep -rl '"github.com/Qualflare/qualflare-go/' internal | xargs sed -i '' 's#"github.com/Qualflare/qualflare-go/#"github.com/Qualflare/qualflare-maestro/#g'
 
 cat > .gitignore <<'EOF'
 qualflare-results/

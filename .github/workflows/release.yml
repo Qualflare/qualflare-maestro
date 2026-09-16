@@ -1,0 +1,85 @@
+# Cutting a release: push a tag.
+#
+#   git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0
+#
+# There is no version file to keep in step -- the version comes from the tag,
+# through ldflags at build time and through the module version for `go install`.
+# The gate below asserts the built binary actually reports the tag, which is the
+# Go equivalent of the tag-vs-manifest check the npm and PyPI reporters run.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write # keyless cosign signing via Sigstore OIDC
+    steps:
+      # Every action is pinned to a commit SHA, not a mutable major tag: this job
+      # holds `contents: write` and a Sigstore signing identity, so a retagged
+      # action would run with them. Matches qualflare-cli's release workflow.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # goreleaser needs the full history for its changelog
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: true
+
+      # The full gate, at the exact bytes about to be published. A release is
+      # the worst possible moment to discover the suite was red.
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l $(git ls-files '*.go'))
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would rewrite:"; echo "$unformatted"; exit 1
+          fi
+      - run: go vet ./...
+      - run: go vet -tags integration ./test/integration/
+      - run: go test -race ./...
+
+      - name: No external dependencies
+        run: |
+          modules=$(go list -m all | grep -v '^github.com/Qualflare/qualflare-maestro$' || true)
+          if [ -n "$modules" ]; then
+            echo "::error::unexpected module dependencies:"; echo "$modules"; exit 1
+          fi
+
+      - name: The binary reports the tag it was built from
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          go build -ldflags "-X github.com/Qualflare/qualflare-maestro/internal/version.Version=$tag" \
+            -o /tmp/qualflare-maestro ./cmd/qualflare-maestro
+          reported=$(/tmp/qualflare-maestro -version | head -1)
+          echo "tag=$tag reported=$reported"
+          case "$reported" in
+            *"$tag"*) ;;
+            *) echo "::error::built binary reports '$reported', which does not contain the tag '$tag'"; exit 1 ;;
+          esac
+
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      - uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+
+      - name: goreleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          # Pinned, not `latest`: a goreleaser release must not change what this
+          # workflow does without someone choosing it. Bump deliberately -- v2.19
+          # is the one to move to, for the postflight_steps cask fix (#6873).
+          version: v2.18.1
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Absent on a fork or before the tap is configured; the brews block
+          # skips itself rather than failing the release.
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

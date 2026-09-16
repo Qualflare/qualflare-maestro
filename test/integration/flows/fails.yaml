@@ -1,0 +1,5 @@
+appId: com.apple.Preferences
+name: Fails
+---
+- launchApp
+- assertVisible: "No Such Row 98765"

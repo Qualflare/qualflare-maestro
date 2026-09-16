@@ -1,0 +1,15 @@
+appId: com.apple.Preferences
+name: Nested
+---
+- launchApp
+- repeat:
+    times: 2
+    commands:
+      - assertVisible: General
+- retry:
+    maxRetries: 1
+    commands:
+      - assertVisible: General
+- runFlow:
+    commands:
+      - assertVisible: General

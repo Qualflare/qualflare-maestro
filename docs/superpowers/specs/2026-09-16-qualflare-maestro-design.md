@@ -116,16 +116,17 @@ when disabled; a wrapper doing that would silently skip the tests, so this repor
 ## Run lifecycle
 
 1. Parse reporter flags; validate the Maestro arguments (owned flags, subcommand).
-2. Resolve `maestro` (`QUALFLARE_MAESTRO_BIN`, else `PATH`). Missing → clear message, exit `127`, no
+2. Resolve `maestro` (`QUALFLARE_MAESTRO_BIN`, else `PATH`). A bare `maestro` in the arguments uses
+   that resolution; only a path ending in `maestro` (e.g. `/opt/maestro/bin/maestro`) names a different binary. Missing → clear message, exit `127`, no
    report.
-3. Create a private work dir `W` = `<outputDir>/.work-<runID>/`.
+3. Create a private work dir `W` = `<outputDir>/.work-<runID>-<pid>/`.
 4. Launch `maestro test <user args> --format junit --output W/report.xml --debug-output W/debug
    --flatten-debug-output`. Stdin inherited; stdout and stderr tee'd to the terminal, last 64 KiB of
    each kept.
 5. Forward SIGINT and SIGTERM to the child; wait for it.
 6. Build the report from `W/report.xml` and `W/debug/`.
 7. Copy referenced screenshots to `<outputDir>/attachments/`, write
-   `<outputDir>/qualflare-maestro-<pid>-<runID>.json`, remove `W`.
+   `<outputDir>/qualflare-maestro-<runID>-<pid>.json`, remove `W`.
 8. Exit with **Maestro's exit code**, unchanged. If writing the report fails, exit `1`.
 
 ## Reading the debug directory
@@ -173,10 +174,10 @@ value; the warning keeps the fallback from being silent.
 
 | Field | Source |
 |---|---|
-| `id` | `<flowPath>#<flow name>`; with more than one suite (`--shard-all`), also `@<os>` so each device keeps its own history |
+| `id` | `<flowPath>#<flow name>`. Only when that id repeats across suites (a flow run on several devices, e.g. `--shard-all`) is it qualified: `@<os>`, and `@<os>#<k>` (k = the suite's 1-based position) if that still repeats. `--shard-split` writes one suite per shard but runs each flow once, so its ids stay unqualified and stable |
 | `name` | flow name (`name` attribute) |
 | `className` | `<flowPath>`, e.g. `.maestro/settings-opens.yaml` |
-| `status` | `SUCCESS` → `passed`; `ERROR` → `failed`; `CANCELED`/`STOPPED` → `aborted` |
+| `status` | `SUCCESS`/`WARNING` → `passed`; `ERROR` → `failed`; `CANCELED`/`STOPPED` → `aborted`; any other non-empty status → `failed` with a `<failure>`, else `aborted`; no status → `failed` with a `<failure>`, else `passed` |
 | `duration` | from commands: latest `timestamp + duration` minus earliest `timestamp`, in ns; JUnit `time` when no commands file matched |
 | `startedAt` | earliest command `timestamp` as RFC 3339, else JUnit `timestamp` when present |
 | `error` | `<failure>` text |
@@ -213,8 +214,12 @@ Outside a git repository, `file` is used as written, with a warning.
 - Capped at **300** per case (`MaxStepsPerTestAttempt`); the rest are dropped with one warning per
   case.
 
-**Attachments** — screenshots copied to `attachments/<runID>-<n>.png`, referenced by
-`localImagePath` relative to the report file, `mimeType: image/png`, at most 50 per case. Needs `qf`
+**Attachments** — screenshots copied to `attachments/<runID>-<pid>-<n>.png` (the pid keeps two
+reporter runs that share a run id and output directory — normal in CI — from overwriting each
+other's screenshots), referenced by
+`localImagePath` relative to the report file, `mimeType: image/png`, at most 50 per case. The
+attachment `name` is that copied file's name, never Maestro's own screenshot file name, which
+embeds the command's argument and could carry a variable's value. Needs `qf`
 CLI ≥ 0.1.24.
 
 - Bundle layout: each `metadata.artifacts` entry of `type: "SCREENSHOT"` on a kept step, resolved
@@ -232,12 +237,18 @@ produces JUnit `<failure>` text reading `Assertion is false: "<the real value>" 
 
 So the reporter also **redacts known values from free text**. It knows two sources of values:
 
-- `--env KEY=VALUE` (and `--env=KEY=VALUE`, `-e KEY=VALUE`) in the Maestro arguments;
+- `--env KEY=VALUE` (and `--env=KEY=VALUE`, `-e KEY=VALUE`, `-e=KEY=VALUE`, `-eKEY=VALUE`) in the Maestro arguments
+  (values inside a picocli `@argfile` are not seen);
 - `MAESTRO_*` variables in the reporter's own process environment, which Maestro copies into flows.
+
+Maestro's own configuration variables are not secrets and are excluded: `MAESTRO_CLI_*`, `MAESTRO_DRIVER_*`,
+`MAESTRO_USE_*`, `MAESTRO_DISABLE_*` and `MAESTRO_VERSION`; the values `true` and `false` are never redacted. All
+replacements happen in one pass, so an inserted `${KEY}` is never rewritten again, and redaction runs before any
+truncation, so a cut can never leave part of a value behind.
 
 Every occurrence of such a value is replaced by `${KEY}` in: case `error`, `description`, property
 and label values, step `name` and `error`, and the unattributed-failure text (which is taken from
-`maestro.log` or stderr). Longer values are replaced first. Values shorter than 4 characters are not
+`maestro.log` or stderr). Longer values claim their occurrences first; a shorter value is never replaced inside, or overlapping, text a longer value already claimed. Values shorter than 4 characters are not
 redacted, because replacing `1` or `on` everywhere would mangle the report; they are documented as not
 protected. IDs, flow names and file paths are never rewritten, so redaction cannot split a flow's
 history.

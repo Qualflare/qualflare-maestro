@@ -1,0 +1,4 @@
+appId: com.apple.Preferences
+---
+- launchApp
+- tapOn: [this is not closed

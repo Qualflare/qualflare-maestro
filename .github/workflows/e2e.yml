@@ -1,0 +1,116 @@
+# Dogfood: qualflare-maestro reports on flows against the iOS Settings app, and
+# the PUBLISHED CLI uploads the report to a public Qualflare project.
+#
+# The CLI is deliberately unpinned: a CLI release that stops understanding this
+# report should turn this red.
+#
+# The flows pass by construction. Failures, invalid YAML and missing devices are
+# test/integration's job, which is never uploaded -- do not add a failing flow here.
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  # Every push to main should produce its own launch.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Dogfood flows + upload to Qualflare
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Maestro (latest)
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Build the reporter
+        run: |
+          go build -ldflags "-X github.com/Qualflare/qualflare-maestro/internal/version.Version=e2e-${GITHUB_SHA::7}" \
+            -o "$RUNNER_TEMP/qualflare-maestro" ./cmd/qualflare-maestro
+
+      - name: Boot an iPhone simulator
+        run: |
+          udid=$(python3 test/integration/pick-simulator.py)
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+
+      # continue-on-error on the next two, gated at the end: a red run is the
+      # one the dashboard most needs to receive.
+      - name: Run the dogfood flows
+        id: suite
+        continue-on-error: true
+        working-directory: e2e
+        run: |
+          "$RUNNER_TEMP/qualflare-maestro" -output-dir e2e-results -environment production \
+            -- maestro test --env DOGFOOD_LABEL=General flows/
+
+      - name: Verify the report matches what the flows declare
+        id: verify
+        continue-on-error: true
+        working-directory: e2e
+        env:
+          QUALFLARE_OUTPUT_DIR: e2e-results
+          EXPECT_NESTING: 'true'
+        run: go run ./verify
+
+      - name: Install the published CLI
+        run: |
+          npm install -g @qualflare/cli
+          qf version
+
+      - name: Record the project's run count before uploading
+        id: runs_before
+        run: echo "count=$(python3 e2e/assert-launch-landed.py qualflare-maestro --print)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Qualflare
+        id: upload
+        if: hashFiles('e2e/e2e-results/*.json') != ''
+        env:
+          QF_TOKEN: ${{ secrets.QF_TOKEN }}
+          QF_BRANCH: ${{ github.ref_name }}
+          QF_COMMIT: ${{ github.sha }}
+        run: |
+          if [ -z "$QF_TOKEN" ]; then
+            echo "::error::QF_TOKEN is not set on this repository."
+            exit 1
+          fi
+          qf login qualflare-maestro --force
+          qf qualflare-maestro collect ./e2e/e2e-results
+
+      - name: Assert the launch reached the project
+        if: steps.upload.outcome == 'success'
+        run: python3 e2e/assert-launch-landed.py qualflare-maestro --before "${{ steps.runs_before.outputs.count }}"
+
+      - name: Keep the report when something went wrong
+        if: steps.suite.outcome != 'success' || steps.verify.outcome != 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: e2e/e2e-results/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Fail if the flows or the verifier were red
+        if: steps.suite.outcome != 'success' || steps.verify.outcome != 'success'
+        run: |
+          echo "::error::suite=${{ steps.suite.outcome }} verify=${{ steps.verify.outcome }}"
+          exit 1
