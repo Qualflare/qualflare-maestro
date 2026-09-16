@@ -135,10 +135,11 @@ func TestFlows(t *testing.T) {
 		"--", "maestro", "test", "--env", "IT_SECRET="+secret, "flows/")
 
 	if res.exit != 1 {
-		t.Errorf("exit = %d, want maestro's 1 (two flows fail on purpose)", res.exit)
+		t.Errorf("exit = %d, want maestro's 1 (three flows fail on purpose)", res.exit)
 	}
 
-	for _, leak := range []string{secret, token, "MAESTRO_QF_IT_TOKEN", "hierarchyRoot", "debugMessage"} {
+	// Variable names may appear as ${NAME} placeholders, so only ban their JSON object-key form.
+	for _, leak := range []string{secret, token, "\"MAESTRO_QF_IT_TOKEN\":", "hierarchyRoot", "debugMessage"} {
 		if bytes.Contains(res.raw, []byte(leak)) {
 			t.Errorf("the report contains %q", leak)
 		}
@@ -150,7 +151,7 @@ func TestFlows(t *testing.T) {
 	cases := byName(res.report)
 	for name, status := range map[string]string{
 		"Passes": "passed", "Fails": "failed", "Optional miss": "passed",
-		"Nested": "passed", "Secret selector": "failed",
+		"Nested": "passed", "Secret selector": "failed", "Maestro env selector": "failed",
 	} {
 		c, ok := cases[name]
 		if !ok {
@@ -164,6 +165,9 @@ func TestFlows(t *testing.T) {
 
 	if e := cases["Secret selector"].Error; !strings.Contains(e, "${IT_SECRET}") {
 		t.Errorf("secret flow error = %q, want the variable named instead of its value", e)
+	}
+	if e := cases["Maestro env selector"].Error; !strings.Contains(e, "${MAESTRO_QF_IT_TOKEN}") {
+		t.Errorf("maestro env flow error = %q, want the MAESTRO_* variable named instead of its value", e)
 	}
 
 	passes := cases["Passes"]
