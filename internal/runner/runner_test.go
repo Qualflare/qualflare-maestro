@@ -22,6 +22,16 @@ func TestRun_PassesTheExitCodeThrough(t *testing.T) {
 	}
 }
 
+func TestRun_DeathBySignalIs128PlusTheSignal(t *testing.T) {
+	res, err := Run([]string{"sh", "-c", "kill -TERM $$"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ExitCode != 143 {
+		t.Fatalf("ExitCode = %d, want 143", res.ExitCode)
+	}
+}
+
 func TestRun_EchoesOutputAndKeepsItsTail(t *testing.T) {
 	var out, errOut bytes.Buffer
 	res, err := Run([]string{"sh", "-c", "echo to-stdout; echo to-stderr 1>&2"}, &out, &errOut)

@@ -77,10 +77,11 @@ func Run(argv []string, stdout, stderr io.Writer) (Result, error) {
 	case waitErr == nil:
 	case errors.As(waitErr, &exitErr):
 		res.ExitCode = exitErr.ExitCode()
-		if res.ExitCode < 0 { // killed by a signal
+		if res.ExitCode < 0 {
 			res.ExitCode = 1
-			if res.Interrupted {
-				res.ExitCode = 130
+			if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+				// Shells report death by signal N as exit status 128+N.
+				res.ExitCode = 128 + int(ws.Signal())
 			}
 		}
 	default:
