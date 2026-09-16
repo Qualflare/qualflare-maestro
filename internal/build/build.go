@@ -136,10 +136,16 @@ func (b *builder) collect() {
 	if in.JUnit != nil {
 		flows, ambiguous := b.flowIndex()
 		multi := len(in.JUnit.Suites) > 1
-		for _, js := range in.JUnit.Suites {
-			s := wire.NewSuite(suiteName(js, multi), Category)
+		duplicateOS := hasDuplicateOS(in.JUnit.Suites)
+		for i, js := range in.JUnit.Suites {
+			osName := osFromDevice(js.Device)
+			caseOS := osName
+			if duplicateOS {
+				caseOS += fmt.Sprintf("#%d", i+1)
+			}
+			s := wire.NewSuite(suiteName(js, multi, duplicateOS, i+1), Category)
 			for _, jc := range js.Cases {
-				wc := b.buildCase(jc, osFromDevice(js.Device), multi, flows, ambiguous)
+				wc := b.buildCase(jc, caseOS, multi, flows, ambiguous)
 				s.Duration += wc.Duration
 				s.Cases = append(s.Cases, wc)
 			}
@@ -200,13 +206,29 @@ func osFromDevice(device string) string {
 	return "unknown"
 }
 
-func suiteName(js junit.Suite, multi bool) string {
+func hasDuplicateOS(suites []junit.Suite) bool {
+	seen := map[string]bool{}
+	for _, suite := range suites {
+		osName := osFromDevice(suite.Device)
+		if seen[osName] {
+			return true
+		}
+		seen[osName] = true
+	}
+	return false
+}
+
+func suiteName(js junit.Suite, multi, duplicateOS bool, position int) string {
 	name := js.Name
 	if name == "" {
 		name = "Maestro"
 	}
 	if multi {
-		name += " (" + osFromDevice(js.Device) + ")"
+		osName := osFromDevice(js.Device)
+		if duplicateOS {
+			osName += fmt.Sprintf(" #%d", position)
+		}
+		name += " (" + osName + ")"
 	}
 	return textutil.Truncate(name, 255)
 }
@@ -415,7 +437,7 @@ func (b *builder) attachments(f *debugdir.Flow, conv steps.Result) []wire.Attach
 		rel := fmt.Sprintf("attachments/%s-%d.png", FileSafe(b.in.Cfg.RunID), b.shots)
 		b.out.Copies = append(b.out.Copies, Copy{From: path, To: rel})
 		out = append(out, wire.Attachment{
-			Name:           textutil.Truncate(filepath.Base(path), 255),
+			Name:           textutil.Truncate(filepath.Base(rel), 255),
 			MimeType:       "image/png",
 			LocalImagePath: rel,
 			StepIndex:      step,

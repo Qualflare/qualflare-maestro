@@ -2,6 +2,7 @@ package build
 
 import (
 	"encoding/json"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -178,6 +179,12 @@ func TestCollect_BundleScreenshotIsLinkedToItsStep(t *testing.T) {
 	if a.StepIndex == nil || *a.StepIndex != 2 || a.MimeType != "image/png" || !strings.HasPrefix(a.LocalImagePath, "attachments/run-1-") {
 		t.Errorf("attachment = %+v", a)
 	}
+	if a.Name != path.Base(a.LocalImagePath) {
+		t.Errorf("attachment name = %q, want copied file name %q", a.Name, path.Base(a.LocalImagePath))
+	}
+	if strings.Contains(a.Name, "Definitely") {
+		t.Errorf("attachment name contains command argument: %q", a.Name)
+	}
 	var copied bool
 	for _, cp := range out.Copies {
 		if cp.To == a.LocalImagePath && strings.HasSuffix(cp.From, "step-005-tapOnElement-Definitely_Not_A_Real_Row.png") {
@@ -200,6 +207,9 @@ func TestCollect_FlatFailureScreenshotPointsAtTheFailedStep(t *testing.T) {
 	fails := caseNamed(t, Collect(load(t, flat)).Report, "Settings fails on purpose")
 	if len(fails.Attachments) != 1 || fails.Attachments[0].StepIndex == nil {
 		t.Fatalf("attachments = %+v", fails.Attachments)
+	}
+	if strings.Contains(fails.Attachments[0].Name, "Settings") {
+		t.Errorf("attachment name contains flow name: %q", fails.Attachments[0].Name)
 	}
 	if i := *fails.Attachments[0].StepIndex; fails.Steps[i].Status != "failed" {
 		t.Errorf("stepIndex %d is a %q step, want the failed one", i, fails.Steps[i].Status)
@@ -332,6 +342,26 @@ func TestCollect_MultipleSuitesQualifyIDsAndNames(t *testing.T) {
 	}
 	if id := c.Suites[1].Cases[0].ID; !strings.HasSuffix(id, "@iPhone Air - iOS 26.5") {
 		t.Errorf("id = %q", id)
+	}
+}
+
+func TestCollect_IdenticalShardDevicesGetDistinctIDs(t *testing.T) {
+	in := load(t, bundle)
+	in.JUnit.Suites = append(in.JUnit.Suites, in.JUnit.Suites[0])
+	c := Collect(in).Report
+	if c.Suites[0].Name == c.Suites[1].Name {
+		t.Errorf("suite names are both %q", c.Suites[0].Name)
+	}
+	firstID := c.Suites[0].Cases[0].ID
+	secondID := c.Suites[1].Cases[0].ID
+	if firstID == secondID {
+		t.Errorf("case ids are both %q", firstID)
+	}
+	if want := "@iPhone 17 - iOS 26.5#1"; !strings.HasSuffix(firstID, want) {
+		t.Errorf("first case id = %q, want suffix %q", firstID, want)
+	}
+	if want := "@iPhone 17 - iOS 26.5#2"; !strings.HasSuffix(secondID, want) {
+		t.Errorf("second case id = %q, want suffix %q", secondID, want)
 	}
 }
 
