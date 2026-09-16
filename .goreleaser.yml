@@ -2,7 +2,7 @@
 #
 # What is kept is the supply-chain posture -- checksums, a
 # CycloneDX SBOM per archive, and a keyless cosign signature over the checksums
-# file -- because that should not vary between the two binaries we ship.
+# file -- because that should not vary between the release targets we ship.
 version: 2
 
 before:

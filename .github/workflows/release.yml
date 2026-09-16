@@ -45,6 +45,7 @@ jobs:
             echo "::error::gofmt would rewrite:"; echo "$unformatted"; exit 1
           fi
       - run: go vet ./...
+      - run: go vet -tags integration ./test/integration/
       - run: go test -race ./...
 
       - name: No external dependencies

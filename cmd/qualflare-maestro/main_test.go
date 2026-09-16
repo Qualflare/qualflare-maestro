@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Qualflare/qualflare-maestro/internal/wire"
 )
@@ -29,6 +30,10 @@ if [ -n "$FAKE_CAPTURE" ]; then
   cp -R "$FAKE_CAPTURE/debug/." "$dbg/"
 fi
 if [ -n "$FAKE_LOG" ]; then printf '%s\n' "$FAKE_LOG" > "$dbg/maestro.log"; fi
+if [ -n "$FAKE_READY_FILE" ]; then
+  touch "$FAKE_READY_FILE"
+  while [ ! -f "$FAKE_CONTINUE_FILE" ]; do sleep 0.01; done
+fi
 exit "${FAKE_EXIT:-0}"
 `
 
@@ -48,6 +53,8 @@ func setup(t *testing.T) (bin, argsFile, outDir string) {
 	t.Setenv("FAKE_CAPTURE", "")
 	t.Setenv("FAKE_LOG", "")
 	t.Setenv("FAKE_EXIT", "")
+	t.Setenv("FAKE_READY_FILE", "")
+	t.Setenv("FAKE_CONTINUE_FILE", "")
 	t.Setenv("QUALFLARE_MAESTRO_BIN", bin)
 	t.Setenv("QUALFLARE_OUTPUT_DIR", outDir)
 	t.Setenv("QUALFLARE_RUN_ID", "t1")
@@ -254,6 +261,67 @@ func TestRun_DisabledRunsMaestroExactlyAsGiven(t *testing.T) {
 	}
 }
 
+func TestRun_InvalidEnabledValueWarnsAndRunsMaestroWithoutAReport(t *testing.T) {
+	_, argsFile, outDir := setup(t)
+	t.Setenv("QUALFLARE_ENABLED", "TRU")
+	var stderr bytes.Buffer
+	if code := run([]string{"flows/"}, &bytes.Buffer{}, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if _, err := os.Stat(argsFile); err != nil {
+		t.Fatalf("maestro was not invoked: %v", err)
+	}
+	if got := stderr.String(); strings.Count(got, "TRU") != 1 || !strings.Contains(got, "reporter is disabled") {
+		t.Fatalf("stderr = %q, want one warning naming TRU and saying the reporter is disabled", got)
+	}
+	if _, err := os.Stat(outDir); err == nil {
+		t.Fatal("an invalid disabled value wrote a report")
+	}
+}
+
+func TestRun_CreatesPrivateWorkDirectories(t *testing.T) {
+	_, _, outDir := setup(t)
+	ready := filepath.Join(t.TempDir(), "ready")
+	resume := filepath.Join(t.TempDir(), "continue")
+	t.Setenv("FAKE_READY_FILE", ready)
+	t.Setenv("FAKE_CONTINUE_FILE", resume)
+
+	done := make(chan int, 1)
+	go func() {
+		done <- run([]string{"flows/"}, &bytes.Buffer{}, &bytes.Buffer{})
+	}()
+	for i := 0; i < 1000; i++ {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if i == 999 {
+			t.Fatal("fake maestro did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	workDir := filepath.Join(outDir, ".work-t1-"+strconv.Itoa(os.Getpid()))
+	for path, want := range map[string]os.FileMode{
+		outDir:                          0o755,
+		workDir:                         0o700,
+		filepath.Join(workDir, "debug"): 0o700,
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Errorf("stat %s: %v", path, err)
+			continue
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s mode = %04o, want %04o", path, got, want)
+		}
+	}
+	if err := os.WriteFile(resume, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := <-done; code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+}
+
 func TestRun_Version(t *testing.T) {
 	setup(t)
 	var stdout bytes.Buffer
@@ -266,5 +334,17 @@ func TestRun_UnknownReporterFlagBeforeDoubleDashIsAUsageError(t *testing.T) {
 	setup(t)
 	if code := run([]string{"-nope=1", "--", "maestro", "test", "flows/"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
 		t.Fatalf("exit = %d, want 2", code)
+	}
+}
+
+func TestLastLinesDropsPartialFirstLineFromBoundedRead(t *testing.T) {
+	const maxBytes = 256 << 10
+	file := filepath.Join(t.TempDir(), "maestro.log")
+	suffix := "line-0\n" + strings.Repeat("z", maxBytes-3-len("line-0\n"))
+	if err := os.WriteFile(file, []byte("PARTIAL\n"+suffix), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastLines(file, 3); !strings.HasPrefix(got, "line-0\n") {
+		t.Fatalf("lastLines starts with a partial line: %q", got[:min(20, len(got))])
 	}
 }

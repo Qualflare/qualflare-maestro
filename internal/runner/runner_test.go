@@ -55,6 +55,9 @@ func TestRun_TailIsBoundedAndKeepsTheEnd(t *testing.T) {
 	if len(res.StderrTail) > TailBytes {
 		t.Fatalf("tail is %d bytes, cap is %d", len(res.StderrTail), TailBytes)
 	}
+	if !strings.HasPrefix(res.StderrTail, "line-") {
+		t.Fatalf("tail starts with a partial line: %q", res.StderrTail[:min(20, len(res.StderrTail))])
+	}
 	if !strings.HasSuffix(res.StderrTail, "LAST\n") {
 		t.Fatalf("tail does not end with the last line: ...%q", res.StderrTail[len(res.StderrTail)-20:])
 	}

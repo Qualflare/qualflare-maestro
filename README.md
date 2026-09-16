@@ -61,11 +61,12 @@ goes straight to Maestro.
 - **A step per command**, named from the flow's YAML (`tapOn: Login`, `assertVisible: ${USER}`).
   An optional command that did not succeed is a skipped step. On Maestro 2.10+, commands inside
   `runFlow`, `repeat` and `retry` are nested under them.
-- **Screenshots** Maestro takes, attached to the step that took them.
+- **Screenshots** Maestro takes of failed and warned steps on 2.10+, or failed steps on 2.6.x,
+  attached to the step that took them.
 - **Durations** measured from the commands themselves, not rounded to whole seconds.
 - **Tags** from the flow's `tags`.
 - **Infrastructure failures.** If Maestro exits without writing results — invalid YAML, no device —
-  the report holds a failed `[unattributed failure]` case with the end of Maestro's log, rather than
+  the report holds an error `[unattributed failure]` case with the end of Maestro's log, rather than
   nothing.
 
 ## Metadata from YAML

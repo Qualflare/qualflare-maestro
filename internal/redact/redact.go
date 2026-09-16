@@ -25,36 +25,42 @@ type Pair struct {
 
 // Redactor replaces known values. The zero value and nil redact nothing.
 type Redactor struct {
-	pairs []Pair
+	replacer *strings.Replacer
 }
 
 // New builds a redactor from variable pairs.
 func New(pairs []Pair) *Redactor {
-	r := &Redactor{}
+	var kept []Pair
 	for _, p := range pairs {
-		if utf8.RuneCountInString(p.Value) >= MinLength {
-			r.pairs = append(r.pairs, p)
+		if utf8.RuneCountInString(p.Value) >= MinLength &&
+			!strings.EqualFold(p.Value, "true") && !strings.EqualFold(p.Value, "false") {
+			kept = append(kept, p)
 		}
 	}
 	// Longest value first, so a value containing another is replaced whole.
-	sort.SliceStable(r.pairs, func(i, j int) bool {
-		if len(r.pairs[i].Value) != len(r.pairs[j].Value) {
-			return len(r.pairs[i].Value) > len(r.pairs[j].Value)
+	sort.SliceStable(kept, func(i, j int) bool {
+		if len(kept[i].Value) != len(kept[j].Value) {
+			return len(kept[i].Value) > len(kept[j].Value)
 		}
-		return r.pairs[i].Key < r.pairs[j].Key
+		return kept[i].Key < kept[j].Key
 	})
+	r := &Redactor{}
+	if len(kept) > 0 {
+		replacements := make([]string, 0, len(kept)*2)
+		for _, p := range kept {
+			replacements = append(replacements, p.Value, "${"+p.Key+"}")
+		}
+		r.replacer = strings.NewReplacer(replacements...)
+	}
 	return r
 }
 
 // String returns s with every known value replaced by ${KEY}.
 func (r *Redactor) String(s string) string {
-	if r == nil {
+	if r == nil || r.replacer == nil {
 		return s
 	}
-	for _, p := range r.pairs {
-		s = strings.ReplaceAll(s, p.Value, "${"+p.Key+"}")
-	}
-	return s
+	return r.replacer.Replace(s)
 }
 
 // FromEnviron returns the MAESTRO_* entries of an os.Environ()-style list.
@@ -62,9 +68,21 @@ func FromEnviron(environ []string) []Pair {
 	var out []Pair
 	for _, kv := range environ {
 		key, value, ok := strings.Cut(kv, "=")
-		if ok && strings.HasPrefix(key, "MAESTRO_") {
+		if ok && strings.HasPrefix(key, "MAESTRO_") && !maestroSetting(key) {
 			out = append(out, Pair{Key: key, Value: value})
 		}
 	}
 	return out
+}
+
+func maestroSetting(key string) bool {
+	if key == "MAESTRO_VERSION" {
+		return true
+	}
+	for _, prefix := range []string{"MAESTRO_CLI_", "MAESTRO_DRIVER_", "MAESTRO_USE_", "MAESTRO_DISABLE_"} {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
 }

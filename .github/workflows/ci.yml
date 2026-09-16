@@ -27,6 +27,7 @@ jobs:
             exit 1
           fi
       - run: go vet ./... && go vet -tags integration ./test/integration/
+      - run: GOOS=windows go vet ./...
       - run: go test -race ./...
 
   floor:

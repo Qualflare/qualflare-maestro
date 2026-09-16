@@ -143,8 +143,14 @@ func TestPassthroughAddsNothing(t *testing.T) {
 
 func TestEnvValues(t *testing.T) {
 	got := EnvValues([]string{"maestro", "test", "--env", "USER=alice99", "-e", "PASS=hunter22",
-		"--env=TOKEN=tok=123", "--env", "NOEQUALS", "flows/"})
-	want := []redact.Pair{{Key: "USER", Value: "alice99"}, {Key: "PASS", Value: "hunter22"}, {Key: "TOKEN", Value: "tok=123"}}
+		"--env=TOKEN=tok=123", "-e=MODE=private-mode", "-eREGION=eu-central-9", "--env", "NOEQUALS", "flows/"})
+	want := []redact.Pair{
+		{Key: "USER", Value: "alice99"},
+		{Key: "PASS", Value: "hunter22"},
+		{Key: "TOKEN", Value: "tok=123"},
+		{Key: "MODE", Value: "private-mode"},
+		{Key: "REGION", Value: "eu-central-9"},
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %#v\nwant %#v", got, want)
 	}

@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Qualflare/qualflare-maestro/internal/config"
+	"github.com/Qualflare/qualflare-maestro/internal/constants"
 	"github.com/Qualflare/qualflare-maestro/internal/debugdir"
 	"github.com/Qualflare/qualflare-maestro/internal/junit"
 	"github.com/Qualflare/qualflare-maestro/internal/redact"
@@ -84,6 +86,28 @@ func TestCollect_CaseIdentityStatusAndError(t *testing.T) {
 	fails := caseNamed(t, c, "Settings fails on purpose")
 	if want := `Assertion is false: "This Text Does Not Exist 12345" is visible`; fails.Status != "failed" || fails.Error != want {
 		t.Errorf("fails = status %q error %q", fails.Status, fails.Error)
+	}
+}
+
+func TestCaseStatus_UnknownStatusesFailClosed(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		status string
+		failed bool
+		want   string
+	}{
+		{name: "pending without failure", status: "PENDING", want: "aborted"},
+		{name: "pending with failure", status: "PENDING", failed: true, want: "failed"},
+		{name: "running without failure", status: "RUNNING", want: "aborted"},
+		{name: "running with failure", status: "RUNNING", failed: true, want: "failed"},
+		{name: "empty without failure", want: "passed"},
+		{name: "empty with failure", failed: true, want: "failed"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := caseStatus(junit.Case{Status: tt.status, Failed: tt.failed}); got != tt.want {
+				t.Fatalf("caseStatus(%q, failed=%v) = %q, want %q", tt.status, tt.failed, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -265,6 +289,34 @@ func TestCollect_RedactsKnownValuesFromFreeText(t *testing.T) {
 	}
 }
 
+func TestCollect_RedactsBeforeTruncatingStepErrors(t *testing.T) {
+	const secret = "hunter22-secret"
+	in := Input{
+		JUnit: &junit.Report{Suites: []junit.Suite{{
+			Name:   "S",
+			Device: "iPhone 17 - iOS 26.5 - DEVICE",
+			Cases:  []junit.Case{{Name: "F", Status: "ERROR"}},
+		}}},
+		Debug: debugdir.Result{Layout: debugdir.LayoutBundle, Flows: []debugdir.Flow{{
+			Name: "F",
+			Entries: []debugdir.Entry{{
+				Kind:         "tapOnElement",
+				Status:       "FAILED",
+				ErrorMessage: strings.Repeat("x", constants.MaxAttemptMessageRunes-6) + secret,
+			}},
+		}}},
+		Redactor: redact.New([]redact.Pair{{Key: "PASSWORD", Value: secret}}),
+	}
+
+	got := caseNamed(t, Collect(in).Report, "F").Steps[0].Error
+	if strings.Contains(got, secret[:6]) {
+		t.Fatalf("step error contains partial secret %q at the truncation boundary", secret[:6])
+	}
+	if n := utf8.RuneCountInString(got); n > constants.MaxAttemptMessageRunes {
+		t.Fatalf("step error is %d runes, want at most %d", n, constants.MaxAttemptMessageRunes)
+	}
+}
+
 func TestCollect_UnattributedFailureWhenNothingWasReported(t *testing.T) {
 	out := Collect(Input{
 		Cfg: config.Config{Environment: "ci", Language: "en-US", RunID: "r"}, ExitCode: 1,
@@ -277,6 +329,17 @@ func TestCollect_UnattributedFailureWhenNothingWasReported(t *testing.T) {
 	c := out.Report.Suites[0].Cases[0]
 	if c.Name != "[unattributed failure]" || c.Status != "error" || c.Error != "No devices found" {
 		t.Errorf("case = %+v", c)
+	}
+}
+
+func TestCollect_RedactsTheUnattributedText(t *testing.T) {
+	out := Collect(Input{
+		ExitCode: 1,
+		LogTail:  "token=hunter22-secret",
+		Redactor: redact.New([]redact.Pair{{Key: "PASSWORD", Value: "hunter22-secret"}}),
+	})
+	if got, want := out.Report.Suites[0].Cases[0].Error, "token=${PASSWORD}"; got != want {
+		t.Fatalf("Error = %q, want %q", got, want)
 	}
 }
 
@@ -316,6 +379,29 @@ func TestCollect_DuplicateFlowNamesSkipEnrichment(t *testing.T) {
 	}
 	if countContaining(out.Warnings, `"Settings opens"`) != 1 {
 		t.Errorf("warnings = %v", out.Warnings)
+	}
+}
+
+func TestCollect_WarnsWhenThereIsNoCommandData(t *testing.T) {
+	in := load(t, bundle)
+	in.Debug = debugdir.Result{}
+	out := Collect(in)
+	if len(out.Report.Suites) != 1 || len(out.Report.Suites[0].Cases) != 3 {
+		t.Fatalf("suites = %+v, want one suite with three cases", out.Report.Suites)
+	}
+	want := "maestro's debug output had no command data, so cases have no steps or screenshots"
+	if len(out.Warnings) != 1 || out.Warnings[0] != want {
+		t.Fatalf("warnings = %v, want exactly %q", out.Warnings, want)
+	}
+}
+
+func TestCollect_WarnsWhenAFlowHasNoCommands(t *testing.T) {
+	in := load(t, flat)
+	missing := in.Debug.Flows[0].Name
+	in.Debug.Flows = in.Debug.Flows[1:]
+	out := Collect(in)
+	if len(out.Warnings) != 1 || !strings.Contains(out.Warnings[0], missing) || !strings.Contains(out.Warnings[0], "no command data matched") {
+		t.Fatalf("warnings = %v, want one warning naming %q", out.Warnings, missing)
 	}
 }
 
@@ -363,6 +449,26 @@ func TestCollect_MultipleSuitesQualifyIDsAndNames(t *testing.T) {
 	}
 	if id := c.Suites[1].Cases[0].ID; !strings.HasSuffix(id, "@iPhone Air - iOS 26.5") {
 		t.Errorf("id = %q", id)
+	}
+}
+
+func TestCollect_ShardSplitKeepsIDsStable(t *testing.T) {
+	in := load(t, bundle)
+	all := in.JUnit.Suites[0].Cases
+	first := in.JUnit.Suites[0]
+	first.Cases = append([]junit.Case(nil), all[:1]...)
+	second := in.JUnit.Suites[0]
+	second.Cases = append([]junit.Case(nil), all[1:]...)
+	in.JUnit.Suites = []junit.Suite{first, second}
+
+	c := Collect(in).Report
+	for _, suite := range c.Suites {
+		for _, cs := range suite.Cases {
+			want := cs.ClassName + "#" + cs.Name
+			if cs.ID != want {
+				t.Errorf("id = %q, want stable unqualified id %q", cs.ID, want)
+			}
+		}
 	}
 }
 

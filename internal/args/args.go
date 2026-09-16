@@ -148,6 +148,12 @@ func EnvValues(maestroArgs []string) []redact.Pair {
 			add(maestroArgs[i])
 		case strings.HasPrefix(a, "--env="):
 			add(strings.TrimPrefix(a, "--env="))
+		case strings.HasPrefix(a, "-e") && !strings.HasPrefix(a, "--") && len(a) > 2:
+			value := strings.TrimPrefix(a, "-e")
+			value = strings.TrimPrefix(value, "=")
+			if strings.Contains(value, "=") {
+				add(value)
+			}
 		}
 	}
 	return out

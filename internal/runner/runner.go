@@ -2,6 +2,7 @@
 package runner
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -92,16 +93,28 @@ func Run(argv []string, stdout, stderr io.Writer) (Result, error) {
 
 // tail keeps the last max bytes written to it.
 type tail struct {
-	max int
-	buf []byte
+	max       int
+	buf       []byte
+	discarded bool
 }
 
 func (t *tail) Write(p []byte) (int, error) {
 	t.buf = append(t.buf, p...)
 	if over := len(t.buf) - t.max; over > 0 {
+		t.discarded = true
 		t.buf = append(t.buf[:0], t.buf[over:]...)
 	}
 	return len(p), nil
 }
 
-func (t *tail) String() string { return string(t.buf) }
+func (t *tail) String() string {
+	buf := t.buf
+	if t.discarded {
+		if newline := bytes.IndexByte(buf, '\n'); newline >= 0 {
+			buf = buf[newline+1:]
+		} else {
+			buf = nil
+		}
+	}
+	return string(buf)
+}

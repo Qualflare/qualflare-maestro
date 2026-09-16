@@ -18,13 +18,23 @@
 - **Flows need unique names.** Maestro names its debug output after the flow. When two flows in one
   run share a name — or one flow runs on several devices with `--shard-all` — their steps cannot be
   told apart, so those cases keep their result but get no steps or screenshots.
-- **Same-model shards.** With `--shard-all` on several devices of the same model, cases get a `#<k>`
-  suffix (the device's position in the run) so their histories stay separate; if Maestro ever
-  reorders shards between runs, those histories can mix.
+- **Shard ids.** With `--shard-all`, ids gain `@<device>` only when a flow runs on more than one
+  device, and `#<k>` only when those devices share a model. `--shard-split` ids are unchanged.
 - **Variable values.** Values passed with `--env` and `MAESTRO_*` environment variables are replaced
   by `${NAME}` in errors, descriptions, properties, labels and step text. Values shorter than 4
   characters are not replaced, and values set any other way — a flow's own `env:` block,
   `evalScript`, a file loaded by a script — are unknown to the reporter and are not protected.
+- **Maestro settings are not secrets.** `MAESTRO_CLI_*`, `MAESTRO_DRIVER_*`, `MAESTRO_USE_*`,
+  `MAESTRO_DISABLE_*` and `MAESTRO_VERSION` are not treated as secrets. The values `true` and
+  `false` are never replaced either.
+- **Argument files are opaque.** Values passed inside a picocli `@argfile` are not seen by the
+  reporter and are not protected.
+- **Unattributed errors use the log tail.** When Maestro exits without writing results, the report's
+  error text is the end of Maestro's log and can include the device id and local paths.
+- **Windows binary paths.** Name the Maestro binary with `QUALFLARE_MAESTRO_BIN`; an explicit
+  `maestro.bat` path in the arguments is not recognised as the binary.
+- **Shorthand reporter flags.** In shorthand form, a flag that is also a reporter flag, such as
+  `-platform`, is taken by the reporter. Use the `--` form to pass it to Maestro.
 - **Platform detection** reads Maestro's device name. If it cannot tell, the report says `ios` and a
   warning asks for `-platform`.
 - **Only iOS has been measured.** Android output is expected to match, but has not been captured yet.

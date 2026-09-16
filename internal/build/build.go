@@ -138,15 +138,19 @@ func (b *builder) collect() {
 		flows, ambiguous := b.flowIndex()
 		multi := len(in.JUnit.Suites) > 1
 		duplicateOS := hasDuplicateOS(in.JUnit.Suites)
-		for i, js := range in.JUnit.Suites {
-			osName := osFromDevice(js.Device)
-			caseOS := osName
-			if duplicateOS {
-				caseOS += fmt.Sprintf("#%d", i+1)
+		identities := b.caseIdentities()
+		if in.Debug.Layout == debugdir.LayoutNone {
+			for _, suite := range in.JUnit.Suites {
+				if len(suite.Cases) > 0 {
+					b.warn("maestro's debug output had no command data, so cases have no steps or screenshots")
+					break
+				}
 			}
+		}
+		for i, js := range in.JUnit.Suites {
 			s := wire.NewSuite(suiteName(js, multi, duplicateOS, i+1), Category)
-			for _, jc := range js.Cases {
-				wc := b.buildCase(jc, caseOS, multi, flows, ambiguous)
+			for j, jc := range js.Cases {
+				wc := b.buildCase(jc, identities[i][j], flows, ambiguous)
 				s.Duration += wc.Duration
 				s.Cases = append(s.Cases, wc)
 			}
@@ -163,6 +167,54 @@ func (b *builder) collect() {
 		b.warn("maestro exited 0 but reported no flows; check the flow path and any --include-tags/--exclude-tags filters")
 	}
 	b.out.Report = c
+}
+
+type caseIdentity struct {
+	id   string
+	path string
+}
+
+func (b *builder) caseIdentities() [][]caseIdentity {
+	identities := make([][]caseIdentity, len(b.in.JUnit.Suites))
+	baseSuites := map[string]map[int]bool{}
+	for i, suite := range b.in.JUnit.Suites {
+		identities[i] = make([]caseIdentity, len(suite.Cases))
+		for j, jc := range suite.Cases {
+			path := b.flowPath(jc.File)
+			base := jc.Name
+			if path != "" {
+				base = path + "#" + jc.Name
+			}
+			identities[i][j] = caseIdentity{id: base, path: path}
+			if baseSuites[base] == nil {
+				baseSuites[base] = map[int]bool{}
+			}
+			baseSuites[base][i] = true
+		}
+	}
+
+	qualifiedCounts := map[string]int{}
+	for i, suite := range b.in.JUnit.Suites {
+		for _, identity := range identities[i] {
+			if len(baseSuites[identity.id]) > 1 {
+				qualifiedCounts[identity.id+"@"+osFromDevice(suite.Device)]++
+			}
+		}
+	}
+	for i, suite := range b.in.JUnit.Suites {
+		for j := range identities[i] {
+			identity := &identities[i][j]
+			if len(baseSuites[identity.id]) <= 1 {
+				continue
+			}
+			qualified := identity.id + "@" + osFromDevice(suite.Device)
+			identity.id = qualified
+			if qualifiedCounts[qualified] > 1 {
+				identity.id += fmt.Sprintf("#%d", i+1)
+			}
+		}
+	}
+	return identities
 }
 
 var iosPattern = regexp.MustCompile(`(?i)\biOS\b`)
@@ -268,20 +320,12 @@ func (b *builder) flowIndex() (map[string]*debugdir.Flow, map[string]bool) {
 	return flows, ambiguous
 }
 
-func (b *builder) buildCase(jc junit.Case, osName string, multi bool, flows map[string]*debugdir.Flow, ambiguous map[string]bool) wire.Case {
+func (b *builder) buildCase(jc junit.Case, identity caseIdentity, flows map[string]*debugdir.Flow, ambiguous map[string]bool) wire.Case {
 	r := b.in.Redactor
-	path := b.flowPath(jc.File)
-	id := jc.Name
-	if path != "" {
-		id = path + "#" + jc.Name
-	}
-	if multi {
-		id += "@" + osName
-	}
 	wc := wire.Case{
-		ID:         id,
+		ID:         identity.id,
 		Name:       textutil.TruncateOr(jc.Name, 255, "(unnamed flow)"),
-		ClassName:  textutil.Truncate(path, 255),
+		ClassName:  textutil.Truncate(identity.path, 255),
 		Status:     caseStatus(jc),
 		Error:      textutil.Truncate(r.String(jc.Failure), constants.MaxCaseErrorRunes),
 		Duration:   int64(math.Round(jc.Seconds * 1e9)),
@@ -289,11 +333,16 @@ func (b *builder) buildCase(jc junit.Case, osName string, multi bool, flows map[
 	}
 	b.applyProperties(&wc, jc.Properties)
 
-	if f, ok := flows[jc.Name]; ok && !ambiguous[jc.Name] {
-		conv := steps.Convert(f.Entries, b.in.Debug.Layout == debugdir.LayoutBundle)
+	f, matched := flows[jc.Name]
+	if matched && !ambiguous[jc.Name] {
+		entries := append([]debugdir.Entry(nil), f.Entries...)
+		for i := range entries {
+			entries[i].ErrorMessage = r.String(entries[i].ErrorMessage)
+		}
+		conv := steps.Convert(entries, b.in.Debug.Layout == debugdir.LayoutBundle)
 		for i := range conv.Steps {
-			conv.Steps[i].Name = r.String(conv.Steps[i].Name)
-			conv.Steps[i].Error = r.String(conv.Steps[i].Error)
+			conv.Steps[i].Name = textutil.Truncate(r.String(conv.Steps[i].Name), 255)
+			conv.Steps[i].Error = textutil.Truncate(conv.Steps[i].Error, constants.MaxAttemptMessageRunes)
 		}
 		wc.Steps = conv.Steps
 		if conv.Truncated > 0 {
@@ -303,6 +352,8 @@ func (b *builder) buildCase(jc junit.Case, osName string, multi bool, flows map[
 			wc.Duration, wc.StartedAt = d, start
 		}
 		wc.Attachments = b.attachments(f, conv)
+	} else if b.in.Debug.Layout != debugdir.LayoutNone && !matched && !ambiguous[jc.Name] {
+		b.warn("flow %q: no command data matched it, so it has no steps or screenshots", jc.Name)
 	}
 	if wc.StartedAt == "" && jc.Timestamp != "" {
 		if t, err := time.ParseInLocation("2006-01-02T15:04:05", jc.Timestamp, time.Local); err == nil {
@@ -323,6 +374,9 @@ func caseStatus(jc junit.Case) string {
 	}
 	if jc.Failed {
 		return "failed"
+	}
+	if jc.Status != "" {
+		return "aborted"
 	}
 	return "passed"
 }

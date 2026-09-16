@@ -10,6 +10,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -95,6 +96,13 @@ func run(argv []string, stdout, errOut io.Writer) int {
 
 	cfg := config.Resolve(f, newRunID)
 	if !cfg.Enabled {
+		raw := f.Enabled
+		if raw == "" {
+			raw = os.Getenv("QUALFLARE_ENABLED")
+		}
+		if raw != "" && !disabledSpelling(raw) {
+			fmt.Fprintf(errOut, "%s -enabled/QUALFLARE_ENABLED value %q is not recognised; the reporter is disabled and Maestro will still run\n", prefix, raw)
+		}
 		return passthrough(maestroArgs, cfg.MaestroBin, stdout, errOut)
 	}
 
@@ -109,7 +117,15 @@ func run(argv []string, stdout, errOut io.Writer) int {
 		fmt.Fprintf(errOut, "%s cannot run %q: install Maestro (https://docs.maestro.dev) or point QUALFLARE_MAESTRO_BIN at it\n", prefix, inv.Argv[0])
 		return 127
 	}
-	if err := os.MkdirAll(inv.DebugDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.OutputDir, 0o755); err != nil {
+		fmt.Fprintf(errOut, "%s %v\n", prefix, err)
+		return 1
+	}
+	if err := os.MkdirAll(workDir, 0o700); err != nil {
+		fmt.Fprintf(errOut, "%s %v\n", prefix, err)
+		return 1
+	}
+	if err := os.MkdirAll(inv.DebugDir, 0o700); err != nil {
 		fmt.Fprintf(errOut, "%s %v\n", prefix, err)
 		return 1
 	}
@@ -163,6 +179,14 @@ func run(argv []string, stdout, errOut io.Writer) int {
 	}
 	fmt.Fprintf(errOut, "%s wrote %d suite(s), %d case(s) to %s\n", prefix, len(out.Report.Suites), countCases(out.Report), path)
 	return res.ExitCode
+}
+
+func disabledSpelling(raw string) bool {
+	switch raw {
+	case "0", "false", "no", "off", "FALSE", "False", "Off", "No":
+		return true
+	}
+	return false
 }
 
 // unknownBeforeDoubleDash returns the first flag in front of a `--` that is not
@@ -269,13 +293,33 @@ func lastLines(path string, n int) string {
 	if path == "" {
 		return ""
 	}
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	info, err := f.Stat()
 	if err != nil {
 		return ""
 	}
 	const maxBytes = 256 << 10
-	if len(data) > maxBytes {
-		data = data[len(data)-maxBytes:]
+	start := info.Size() - maxBytes
+	if start < 0 {
+		start = 0
+	}
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		return ""
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxBytes))
+	if err != nil {
+		return ""
+	}
+	if start > 0 {
+		if newline := bytes.IndexByte(data, '\n'); newline >= 0 {
+			data = data[newline+1:]
+		} else {
+			data = nil
+		}
 	}
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	if len(lines) > n {

@@ -15,3 +15,6 @@ All notable changes to this project are documented here. The format follows
 - Supports both Maestro debug-output layouts (2.6.x flat files and the 2.10+ per-flow bundle),
   chosen by what is on disk.
 - Replaces `--env` and `MAESTRO_*` values with `${NAME}` in report text.
+- Excludes Maestro's own settings and boolean values from redaction.
+- Qualifies case ids only when the same flow runs in more than one suite, keeping `--shard-split`
+  ids stable.
