@@ -117,7 +117,7 @@ when disabled; a wrapper doing that would silently skip the tests, so this repor
 
 1. Parse reporter flags; validate the Maestro arguments (owned flags, subcommand).
 2. Resolve `maestro` (`QUALFLARE_MAESTRO_BIN`, else `PATH`). A bare `maestro` in the arguments uses
-   that resolution; only an argument containing a path separator names a different binary. Missing → clear message, exit `127`, no
+   that resolution; only a path ending in `maestro` (e.g. `/opt/maestro/bin/maestro`) names a different binary. Missing → clear message, exit `127`, no
    report.
 3. Create a private work dir `W` = `<outputDir>/.work-<runID>-<pid>/`.
 4. Launch `maestro test <user args> --format junit --output W/report.xml --debug-output W/debug
@@ -126,7 +126,7 @@ when disabled; a wrapper doing that would silently skip the tests, so this repor
 5. Forward SIGINT and SIGTERM to the child; wait for it.
 6. Build the report from `W/report.xml` and `W/debug/`.
 7. Copy referenced screenshots to `<outputDir>/attachments/`, write
-   `<outputDir>/qualflare-maestro-<pid>-<runID>.json`, remove `W`.
+   `<outputDir>/qualflare-maestro-<runID>-<pid>.json`, remove `W`.
 8. Exit with **Maestro's exit code**, unchanged. If writing the report fails, exit `1`.
 
 ## Reading the debug directory

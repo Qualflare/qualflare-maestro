@@ -21,7 +21,7 @@ qualflare-maestro -environment staging -- maestro test --env USER=ci .maestro/
 | `-run-id` | `QUALFLARE_RUN_ID` | CI run, else random | Groups one launch's report files; every shard must share it |
 | `-shard-index` | `QUALFLARE_SHARD_INDEX` | — | Which shard produced these cases |
 | `-enabled` | `QUALFLARE_ENABLED` | `true` | `false` runs Maestro exactly as given and writes no report |
-| — | `QUALFLARE_MAESTRO_BIN` | `maestro` on `PATH` | The Maestro executable used by a bare `maestro` in the `--` form; only an argument containing a path separator names a different binary |
+| — | `QUALFLARE_MAESTRO_BIN` | `maestro` on `PATH` | The Maestro executable used by a bare `maestro` in the `--` form; a path ending in `maestro` (e.g. `/opt/maestro/bin/maestro`) in its place runs that binary instead |
 | `-version` | — | — | Print the version and exit |
 
 ## Flags the reporter owns
