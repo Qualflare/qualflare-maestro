@@ -173,7 +173,7 @@ value; the warning keeps the fallback from being silent.
 
 | Field | Source |
 |---|---|
-| `id` | `<flowPath>#<flow name>`; with more than one suite (`--shard-all`), also `@<os>` so each device keeps its own history |
+| `id` | `<flowPath>#<flow name>`; with more than one suite (`--shard-all`), also `@<os>` so each device keeps its own history, and `@<os>#<k>` (k = the suite's 1-based position) when two suites share the same device name, so identical simulators never produce duplicate ids |
 | `name` | flow name (`name` attribute) |
 | `className` | `<flowPath>`, e.g. `.maestro/settings-opens.yaml` |
 | `status` | `SUCCESS` → `passed`; `ERROR` → `failed`; `CANCELED`/`STOPPED` → `aborted` |
@@ -214,7 +214,9 @@ Outside a git repository, `file` is used as written, with a warning.
   case.
 
 **Attachments** — screenshots copied to `attachments/<runID>-<n>.png`, referenced by
-`localImagePath` relative to the report file, `mimeType: image/png`, at most 50 per case. Needs `qf`
+`localImagePath` relative to the report file, `mimeType: image/png`, at most 50 per case. The
+attachment `name` is that copied file's name, never Maestro's own screenshot file name, which
+embeds the command's argument and could carry a variable's value. Needs `qf`
 CLI ≥ 0.1.24.
 
 - Bundle layout: each `metadata.artifacts` entry of `type: "SCREENSHOT"` on a kept step, resolved
