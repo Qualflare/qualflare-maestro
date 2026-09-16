@@ -1,0 +1,11 @@
+appId: com.apple.Preferences
+name: Passes
+tags:
+  - integration
+properties:
+  qualflare.priority: critical
+  qualflare.link.issue: https://example.com/IT-1
+  qualflare.label.team: mobile
+---
+- launchApp
+- assertVisible: General
