@@ -103,9 +103,9 @@ func Read(dir string) Result {
 	for _, it := range items {
 		name := it.Name()
 		switch {
-		case it.IsDir() && isFile(filepath.Join(dir, name, "commands.json")):
+		case it.Type().IsDir() && isFile(filepath.Join(dir, name, "commands.json")):
 			bundles = append(bundles, name)
-		case !it.IsDir() && strings.HasPrefix(name, "commands-") && strings.HasSuffix(name, ".json"):
+		case it.Type().IsRegular() && strings.HasPrefix(name, "commands-") && strings.HasSuffix(name, ".json"):
 			flats = append(flats, name)
 		}
 	}
@@ -141,7 +141,7 @@ func readBundle(res *Result, flowDir string) {
 	if shots, err := os.ReadDir(filepath.Join(flowDir, "screenshots")); err == nil {
 		for _, s := range shots {
 			p := filepath.Join(flowDir, "screenshots", s.Name())
-			if !s.IsDir() && strings.HasSuffix(s.Name(), ".png") && !referenced[p] {
+			if s.Type().IsRegular() && strings.HasSuffix(s.Name(), ".png") && !referenced[p] {
 				flow.Screenshots = append(flow.Screenshots, Screenshot{Path: p})
 			}
 		}
@@ -160,7 +160,7 @@ func readFlat(res *Result, dir, file string, items []os.DirEntry) {
 	suffix := "-(" + key + ").png"
 	for _, it := range items {
 		n := it.Name()
-		if !it.IsDir() && strings.HasPrefix(n, "screenshot-") && strings.HasSuffix(n, suffix) {
+		if it.Type().IsRegular() && strings.HasPrefix(n, "screenshot-") && strings.HasSuffix(n, suffix) {
 			flow.Screenshots = append(flow.Screenshots, Screenshot{
 				Path:   filepath.Join(dir, n),
 				Failed: strings.Contains(n, "❌"),
@@ -263,7 +263,7 @@ func nameOr(name, fallback string) string {
 }
 
 func isFile(p string) bool {
-	st, err := os.Stat(p)
+	st, err := os.Lstat(p)
 	return err == nil && st.Mode().IsRegular()
 }
 

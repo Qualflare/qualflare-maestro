@@ -125,6 +125,43 @@ func TestRead_ArtifactPathsCannotEscapeTheFlowFolder(t *testing.T) {
 	}
 }
 
+func TestRead_SymlinkedArtifactIsIgnored(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(dir, "outside.png")
+	write(t, outside, "png")
+	write(t, filepath.Join(dir, "Flow", "commands.json"),
+		`[{"command":{"launchAppCommand":{"appId":"x"}},"metadata":{"status":"COMPLETED","timestamp":1,"sequenceNumber":0,"artifacts":[{"type":"SCREENSHOT","path":"screenshots/escape.png"}]}}]`)
+	if err := os.MkdirAll(filepath.Join(dir, "Flow", "screenshots"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "Flow", "screenshots", "escape.png")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	r := Read(dir)
+	flow := flowNamed(t, r, "Flow")
+	if got := flow.Entries[0].Screenshots; len(got) != 0 {
+		t.Errorf("entry screenshots = %v, want none", got)
+	}
+	if got := flow.Screenshots; len(got) != 0 {
+		t.Errorf("unreferenced screenshots = %v, want none", got)
+	}
+}
+
+func TestRead_SymlinkedFlowFolderIsNotABundle(t *testing.T) {
+	dir := t.TempDir()
+	realFlow := t.TempDir()
+	write(t, filepath.Join(realFlow, "commands.json"),
+		`[{"command":{"launchAppCommand":{"appId":"x"}},"metadata":{"status":"COMPLETED","timestamp":1,"sequenceNumber":0}}]`)
+	if err := os.Symlink(realFlow, filepath.Join(dir, "Linked")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if r := Read(dir); len(r.Flows) != 0 {
+		t.Fatalf("flows = %+v, want none", r.Flows)
+	}
+}
+
 func TestRead_FlatShardPrefixAndMaestroLog(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "maestro.log"), "log")
