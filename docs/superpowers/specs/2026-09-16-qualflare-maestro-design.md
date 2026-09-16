@@ -116,9 +116,10 @@ when disabled; a wrapper doing that would silently skip the tests, so this repor
 ## Run lifecycle
 
 1. Parse reporter flags; validate the Maestro arguments (owned flags, subcommand).
-2. Resolve `maestro` (`QUALFLARE_MAESTRO_BIN`, else `PATH`). Missing → clear message, exit `127`, no
+2. Resolve `maestro` (`QUALFLARE_MAESTRO_BIN`, else `PATH`). A bare `maestro` in the arguments uses
+   that resolution; only an argument containing a path separator names a different binary. Missing → clear message, exit `127`, no
    report.
-3. Create a private work dir `W` = `<outputDir>/.work-<runID>/`.
+3. Create a private work dir `W` = `<outputDir>/.work-<runID>-<pid>/`.
 4. Launch `maestro test <user args> --format junit --output W/report.xml --debug-output W/debug
    --flatten-debug-output`. Stdin inherited; stdout and stderr tee'd to the terminal, last 64 KiB of
    each kept.
@@ -213,7 +214,9 @@ Outside a git repository, `file` is used as written, with a warning.
 - Capped at **300** per case (`MaxStepsPerTestAttempt`); the rest are dropped with one warning per
   case.
 
-**Attachments** — screenshots copied to `attachments/<runID>-<n>.png`, referenced by
+**Attachments** — screenshots copied to `attachments/<runID>-<pid>-<n>.png` (the pid keeps two
+reporter runs that share a run id and output directory — normal in CI — from overwriting each
+other's screenshots), referenced by
 `localImagePath` relative to the report file, `mimeType: image/png`, at most 50 per case. The
 attachment `name` is that copied file's name, never Maestro's own screenshot file name, which
 embeds the command's argument and could carry a variable's value. Needs `qf`
