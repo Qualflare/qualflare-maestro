@@ -105,6 +105,14 @@ owned). A subcommand other than `test` exits `2`.
 `qualflare-go`'s `-framework` and `-repeat` are not carried over. `-platform` defaults to *detect*
 rather than a fixed value. `QUALFLARE_MAESTRO_BIN` overrides which `maestro` is run.
 
+Reporter flags are recognised only **before** the Maestro arguments: the first token that is `--` or
+not a known reporter flag starts them. The `--` form is the documented one, since it avoids any
+confusion with a Maestro flag of the same name.
+
+**`-enabled false`** (or `QUALFLARE_ENABLED=false`) runs Maestro exactly as given — no owned flags
+added, no report written — and returns its exit code. `qualflare-go` returns before running anything
+when disabled; a wrapper doing that would silently skip the tests, so this reporter does not.
+
 ## Run lifecycle
 
 1. Parse reporter flags; validate the Maestro arguments (owned flags, subcommand).
@@ -215,6 +223,28 @@ CLI ≥ 0.1.24.
 - Flat layout: `screenshot-*-(<flow>).png` files whose flow name matches the case. A `❌` screenshot
   gets the `stepIndex` of the case's first `failed` step; any other is attached without one.
 
+## Keeping variable values out of the report
+
+Step names come from raw commands, and `defineVariablesCommand` is dropped. That is not the whole
+job, because **Maestro's error messages are evaluated**: a flow failing on `assertVisible: ${SECRET}`
+produces JUnit `<failure>` text reading `Assertion is false: "<the real value>" is visible`, and
+`maestro.log` records evaluated commands too.
+
+So the reporter also **redacts known values from free text**. It knows two sources of values:
+
+- `--env KEY=VALUE` (and `--env=KEY=VALUE`, `-e KEY=VALUE`) in the Maestro arguments;
+- `MAESTRO_*` variables in the reporter's own process environment, which Maestro copies into flows.
+
+Every occurrence of such a value is replaced by `${KEY}` in: case `error`, `description`, property
+and label values, step `name` and `error`, and the unattributed-failure text (which is taken from
+`maestro.log` or stderr). Longer values are replaced first. Values shorter than 4 characters are not
+redacted, because replacing `1` or `on` everywhere would mangle the report; they are documented as not
+protected. IDs, flow names and file paths are never rewritten, so redaction cannot split a flow's
+history.
+
+Values set any other way (a flow's own `env:` block, `evalScript`, an `.env` file loaded by a script)
+are invisible to the wrapper and are documented as not protected.
+
 ## Failure handling
 
 | Situation | Report | Exit |
@@ -238,7 +268,8 @@ Follows `qualflare-go`:
 ```
 cmd/qualflare-maestro/main.go        entry, flags, exit codes
 internal/config/                     flags + env      (ported, trimmed)
-internal/args/                       Maestro argument validation and flag injection
+internal/args/                       Maestro argument validation, flag injection, --env values
+internal/redact/                     replaces known variable values with ${KEY}
 internal/runner/                     child process, tee, signal forwarding
 internal/junit/                      JUnit reader
 internal/debugdir/                   layout detection, commands reading, flow matching
@@ -288,9 +319,10 @@ verified by the release workflow before publishing, as in `qualflare-go`.
 - **Layout drift** — Maestro releases every few weeks and changed its layout once already. Layout
   detection plus the latest-release CI job is what catches the next change; a run whose debug
   directory matches neither layout still produces a correct case-level report, with a warning.
-- **Secrets beyond `defineVariables`** — the guarantee is "no `--env` or `MAESTRO_*` value appears
-  anywhere in the report". The integration verifier checks it end to end, so a command type that
-  stores evaluated values in its raw form is caught rather than assumed away.
+- **Secrets** — the guarantee is "no `--env` or `MAESTRO_*` value of 4+ characters appears anywhere
+  in the report", enforced by redaction (above). The integration suite fails a flow on a secret
+  selector on purpose and checks the written report end to end, so a leak path redaction misses is
+  caught rather than assumed away.
 - **`junitId`** — the case `id` stays `<flowPath>#<name>`. A user's `junitId` is a JUnit concern, so
   changing it never splits a flow's history.
 - **macOS CI cost** — iOS simulator jobs are slow; the dogfood suite stays small for that reason.
