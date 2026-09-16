@@ -177,7 +177,7 @@ value; the warning keeps the fallback from being silent.
 | `id` | `<flowPath>#<flow name>`. Only when that id repeats across suites (a flow run on several devices, e.g. `--shard-all`) is it qualified: `@<os>`, and `@<os>#<k>` (k = the suite's 1-based position) if that still repeats. `--shard-split` writes one suite per shard but runs each flow once, so its ids stay unqualified and stable |
 | `name` | flow name (`name` attribute) |
 | `className` | `<flowPath>`, e.g. `.maestro/settings-opens.yaml` |
-| `status` | `SUCCESS` → `passed`; `ERROR` → `failed`; `CANCELED`/`STOPPED` → `aborted` |
+| `status` | `SUCCESS`/`WARNING` → `passed`; `ERROR` → `failed`; `CANCELED`/`STOPPED` → `aborted`; any other non-empty status → `failed` with a `<failure>`, else `aborted`; no status → `failed` with a `<failure>`, else `passed` |
 | `duration` | from commands: latest `timestamp + duration` minus earliest `timestamp`, in ns; JUnit `time` when no commands file matched |
 | `startedAt` | earliest command `timestamp` as RFC 3339, else JUnit `timestamp` when present |
 | `error` | `<failure>` text |
@@ -248,7 +248,7 @@ truncation, so a cut can never leave part of a value behind.
 
 Every occurrence of such a value is replaced by `${KEY}` in: case `error`, `description`, property
 and label values, step `name` and `error`, and the unattributed-failure text (which is taken from
-`maestro.log` or stderr). Longer values are replaced first. Values shorter than 4 characters are not
+`maestro.log` or stderr). Longer values claim their occurrences first; a shorter value is never replaced inside, or overlapping, text a longer value already claimed. Values shorter than 4 characters are not
 redacted, because replacing `1` or `on` everywhere would mangle the report; they are documented as not
 protected. IDs, flow names and file paths are never rewritten, so redaction cannot split a flow's
 history.
