@@ -1,0 +1,17 @@
+appId: com.apple.Preferences
+name: Settings nested commands
+tags:
+  - probe
+---
+- launchApp
+- repeat:
+    times: 2
+    commands:
+      - assertVisible: ${LABEL}
+- retry:
+    maxRetries: 1
+    commands:
+      - assertVisible: ${LABEL}
+- runFlow:
+    commands:
+      - assertVisible: ${LABEL}

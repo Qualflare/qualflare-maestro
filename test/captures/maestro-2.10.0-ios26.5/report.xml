@@ -1,0 +1,24 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="iPhone 17 - iOS 26.5 - 089E029C-523A-4F81-8558-F0297DC8FF47" tests="3" failures="1" time="38.956" timestamp="2026-09-16T19:26:50">
+    <testcase id="Settings nested commands" name="Settings nested commands" classname="Settings nested commands" file="flows/settings-nested.yaml" time="8.57" timestamp="2026-09-16T19:26:50" status="SUCCESS">
+      <properties>
+        <property name="tags" value="probe"/>
+      </properties>
+    </testcase>
+    <testcase id="Settings fails on purpose" name="Settings fails on purpose" classname="Settings fails on purpose" file="flows/settings-fails.yaml" time="20.496" timestamp="2026-09-16T19:26:59" status="ERROR">
+      <properties>
+        <property name="tags" value="probe"/>
+      </properties>
+      <failure>Assertion is false: "This Text Does Not Exist 12345" is visible</failure>
+    </testcase>
+    <testcase id="Settings opens" name="Settings opens" classname="Settings opens" file="flows/settings-opens.yaml" time="9.865" timestamp="2026-09-16T19:27:19" status="SUCCESS">
+      <properties>
+        <property name="qualflare.priority" value="high"/>
+        <property name="qualflare.link.issue" value="https://example.com/QF-1"/>
+        <property name="team" value="mobile"/>
+        <property name="tags" value="smoke, probe"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

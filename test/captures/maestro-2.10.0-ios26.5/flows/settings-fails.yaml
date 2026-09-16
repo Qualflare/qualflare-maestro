@@ -1,0 +1,7 @@
+appId: com.apple.Preferences
+name: Settings fails on purpose
+tags:
+  - probe
+---
+- launchApp
+- assertVisible: "This Text Does Not Exist 12345"

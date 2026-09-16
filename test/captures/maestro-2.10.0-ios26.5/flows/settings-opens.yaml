@@ -1,0 +1,15 @@
+appId: com.apple.Preferences
+name: Settings opens
+tags:
+  - smoke
+  - probe
+properties:
+  qualflare.priority: high
+  qualflare.link.issue: https://example.com/QF-1
+  team: mobile
+---
+- launchApp
+- assertVisible: ${LABEL}
+- tapOn:
+    text: "Definitely Not A Real Row"
+    optional: true
