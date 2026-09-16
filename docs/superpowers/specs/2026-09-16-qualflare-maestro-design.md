@@ -174,7 +174,7 @@ value; the warning keeps the fallback from being silent.
 
 | Field | Source |
 |---|---|
-| `id` | `<flowPath>#<flow name>`; with more than one suite (`--shard-all`), also `@<os>` so each device keeps its own history, and `@<os>#<k>` (k = the suite's 1-based position) when two suites share the same device name, so identical simulators never produce duplicate ids |
+| `id` | `<flowPath>#<flow name>`. Only when that id repeats across suites (a flow run on several devices, e.g. `--shard-all`) is it qualified: `@<os>`, and `@<os>#<k>` (k = the suite's 1-based position) if that still repeats. `--shard-split` writes one suite per shard but runs each flow once, so its ids stay unqualified and stable |
 | `name` | flow name (`name` attribute) |
 | `className` | `<flowPath>`, e.g. `.maestro/settings-opens.yaml` |
 | `status` | `SUCCESS` → `passed`; `ERROR` → `failed`; `CANCELED`/`STOPPED` → `aborted` |
@@ -237,8 +237,14 @@ produces JUnit `<failure>` text reading `Assertion is false: "<the real value>" 
 
 So the reporter also **redacts known values from free text**. It knows two sources of values:
 
-- `--env KEY=VALUE` (and `--env=KEY=VALUE`, `-e KEY=VALUE`) in the Maestro arguments;
+- `--env KEY=VALUE` (and `--env=KEY=VALUE`, `-e KEY=VALUE`, `-e=KEY=VALUE`, `-eKEY=VALUE`) in the Maestro arguments
+  (values inside a picocli `@argfile` are not seen);
 - `MAESTRO_*` variables in the reporter's own process environment, which Maestro copies into flows.
+
+Maestro's own configuration variables are not secrets and are excluded: `MAESTRO_CLI_*`, `MAESTRO_DRIVER_*`,
+`MAESTRO_USE_*`, `MAESTRO_DISABLE_*` and `MAESTRO_VERSION`; the values `true` and `false` are never redacted. All
+replacements happen in one pass, so an inserted `${KEY}` is never rewritten again, and redaction runs before any
+truncation, so a cut can never leave part of a value behind.
 
 Every occurrence of such a value is replaced by `${KEY}` in: case `error`, `description`, property
 and label values, step `name` and `error`, and the unattributed-failure text (which is taken from
