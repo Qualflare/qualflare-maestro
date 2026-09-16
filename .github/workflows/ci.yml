@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Lint, vet, unit test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l $(git ls-files '*.go'))
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would rewrite:"; echo "$unformatted"
+            exit 1
+          fi
+      - run: go vet ./... && go vet -tags integration ./test/integration/
+      - run: go test -race ./...
+
+  floor:
+    name: Go 1.21 (module floor)
+    needs: unit
+    runs-on: ubuntu-latest
+    env:
+      # Without this a newer toolchain is downloaded silently and the floor is
+      # never actually tested.
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.21'
+      - run: go build ./... && go test ./...
+
+  no-deps:
+    name: Zero external dependencies
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: |
+          modules=$(go list -m all | grep -v '^github.com/Qualflare/qualflare-maestro$' || true)
+          if [ -n "$modules" ]; then
+            echo "::error::unexpected module dependencies:"; echo "$modules"; exit 1
+          fi
+
+  maestro:
+    name: Real Maestro ${{ matrix.maestro }} on an iOS simulator
+    needs: unit
+    runs-on: macos-15
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # 2.6.1 writes the flat debug layout, latest the per-flow bundle. Both
+        # must keep working; latest is also what catches Maestro's next change.
+        maestro: ['2.6.1', 'latest']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Maestro
+        run: |
+          if [ "${{ matrix.maestro }}" != "latest" ]; then export MAESTRO_VERSION="${{ matrix.maestro }}"; fi
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - run: maestro --version
+      # Before any simulator boots: these cases need no device.
+      - name: Invalid YAML and no device
+        run: go test -tags integration ./test/integration/ -run 'TestInvalidYAML|TestNoDevice' -v -count=1 -timeout 30m
+      - name: Boot an iPhone simulator
+        run: |
+          udid=$(python3 test/integration/pick-simulator.py)
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+      - name: Flows against the Settings app
+        run: go test -tags integration ./test/integration/ -run TestFlows -v -count=1 -timeout 50m

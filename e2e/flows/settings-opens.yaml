@@ -1,0 +1,12 @@
+appId: com.apple.Preferences
+name: Settings opens
+tags:
+  - dogfood
+properties:
+  qualflare.priority: high
+  qualflare.description: Opens the iOS Settings app and checks a row is visible.
+  qualflare.link.custom.repository: https://github.com/Qualflare/qualflare-maestro
+  qualflare.label.surface: settings
+---
+- launchApp
+- assertVisible: ${DOGFOOD_LABEL}

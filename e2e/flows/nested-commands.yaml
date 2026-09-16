@@ -1,0 +1,17 @@
+appId: com.apple.Preferences
+name: Nested commands
+tags:
+  - dogfood
+---
+- launchApp
+- repeat:
+    times: 2
+    commands:
+      - assertVisible: ${DOGFOOD_LABEL}
+- retry:
+    maxRetries: 1
+    commands:
+      - assertVisible: ${DOGFOOD_LABEL}
+- runFlow:
+    commands:
+      - assertVisible: ${DOGFOOD_LABEL}

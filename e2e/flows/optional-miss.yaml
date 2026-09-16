@@ -1,0 +1,10 @@
+appId: com.apple.Preferences
+name: An optional command that misses
+tags:
+  - dogfood
+---
+- launchApp
+- tapOn:
+    text: "No Such Row 12345"
+    optional: true
+- assertVisible: ${DOGFOOD_LABEL}
