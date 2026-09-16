@@ -47,7 +47,7 @@ func TestBuild_LongFormInjectsTheOwnedFlagsRightAfterTest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"maestro", "test",
+	want := []string{"ignored", "test",
 		"--format", "junit", "--output", filepath.Join(work, "report.xml"),
 		"--debug-output", filepath.Join(work, "debug"), "--flatten-debug-output",
 		"--env", "X=1", "flows/"}
@@ -126,9 +126,10 @@ func TestBuild_NothingToRun(t *testing.T) {
 
 func TestPassthroughAddsNothing(t *testing.T) {
 	cases := map[string][2][]string{
-		"long":      {{"maestro", "test", "--format", "html", "flows/"}, {"maestro", "test", "--format", "html", "flows/"}},
-		"shorthand": {{"flows/"}, {"bin", "test", "flows/"}},
-		"test":      {{"test", "flows/"}, {"bin", "test", "flows/"}},
+		"long":          {{"maestro", "test", "--format", "html", "flows/"}, {"bin", "test", "--format", "html", "flows/"}},
+		"explicit path": {{"/custom/bin/maestro", "test", "flows/"}, {"/custom/bin/maestro", "test", "flows/"}},
+		"shorthand":     {{"flows/"}, {"bin", "test", "flows/"}},
+		"test":          {{"test", "flows/"}, {"bin", "test", "flows/"}},
 	}
 	for name, c := range cases {
 		if got := Passthrough(c[0], "bin"); !reflect.DeepEqual(got, c[1]) {

@@ -68,8 +68,10 @@ func Build(maestroArgs []string, defaultBin, workDir string) (Invocation, error)
 	bin := defaultBin
 	var globals, testArgs []string
 	switch {
-	case len(maestroArgs) > 0 && filepath.Base(maestroArgs[0]) == "maestro":
-		bin = maestroArgs[0]
+	case len(maestroArgs) > 0 && (maestroArgs[0] == "maestro" || isExplicitMaestroPath(maestroArgs[0])):
+		if isExplicitMaestroPath(maestroArgs[0]) {
+			bin = maestroArgs[0]
+		}
 		rest := maestroArgs[1:]
 		i := indexOf(rest, "test")
 		if i < 0 {
@@ -114,13 +116,20 @@ func Passthrough(maestroArgs []string, defaultBin string) []string {
 	switch {
 	case len(maestroArgs) == 0:
 		return nil
-	case filepath.Base(maestroArgs[0]) == "maestro":
+	case maestroArgs[0] == "maestro":
+		return append([]string{defaultBin}, maestroArgs[1:]...)
+	case isExplicitMaestroPath(maestroArgs[0]):
 		return append([]string{}, maestroArgs...)
 	case maestroArgs[0] == "test":
 		return append([]string{defaultBin}, maestroArgs...)
 	default:
 		return append([]string{defaultBin, "test"}, maestroArgs...)
 	}
+}
+
+func isExplicitMaestroPath(arg string) bool {
+	return filepath.Base(arg) == "maestro" &&
+		(strings.ContainsRune(arg, filepath.Separator) || strings.ContainsRune(arg, '/'))
 }
 
 // EnvValues returns the KEY=VALUE pairs passed with --env or -e.

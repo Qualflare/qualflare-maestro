@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -138,6 +139,11 @@ func TestRun_BundleCaptureEndToEnd(t *testing.T) {
 	if len(shots) != 2 {
 		t.Errorf("attachments on disk = %v, want 2", shots)
 	}
+	for _, shot := range shots {
+		if !strings.Contains(filepath.Base(shot), "-"+strconv.Itoa(os.Getpid())+"-") {
+			t.Errorf("attachment file name %q does not contain reporter pid", filepath.Base(shot))
+		}
+	}
 	if work, _ := filepath.Glob(filepath.Join(outDir, ".work-*")); len(work) != 0 {
 		t.Errorf("work directory left behind: %v", work)
 	}
@@ -175,6 +181,22 @@ func TestRun_ShorthandPrependsTest(t *testing.T) {
 	passed, _ := os.ReadFile(argsFile)
 	if first := strings.SplitN(string(passed), "\n", 2)[0]; first != "test" {
 		t.Errorf("first argument = %q, want test", first)
+	}
+}
+
+func TestRun_BareMaestroUsesTheConfiguredBinary(t *testing.T) {
+	_, argsFile, _ := setup(t)
+	var stderr bytes.Buffer
+	code := run([]string{"--", "maestro", "test", "flows/"}, &bytes.Buffer{}, &stderr)
+	if code == 127 {
+		t.Fatalf("exit = 127, configured Maestro was not found:\n%s", stderr.String())
+	}
+	passed, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("configured Maestro was not invoked: %v", err)
+	}
+	if !strings.Contains(string(passed), "flows/\n") {
+		t.Errorf("configured Maestro args do not contain flows/:\n%s", passed)
 	}
 }
 

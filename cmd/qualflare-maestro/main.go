@@ -98,7 +98,8 @@ func run(argv []string, stdout, errOut io.Writer) int {
 		return passthrough(maestroArgs, cfg.MaestroBin, stdout, errOut)
 	}
 
-	workDir := filepath.Join(cfg.OutputDir, ".work-"+build.FileSafe(cfg.RunID)+"-"+strconv.Itoa(os.Getpid()))
+	fileToken := build.FileSafe(cfg.RunID) + "-" + strconv.Itoa(os.Getpid())
+	workDir := filepath.Join(cfg.OutputDir, ".work-"+fileToken)
 	inv, err := args.Build(maestroArgs, cfg.MaestroBin, workDir)
 	if err != nil {
 		fmt.Fprintf(errOut, "%s %v\n", prefix, err)
@@ -130,6 +131,7 @@ func run(argv []string, stdout, errOut io.Writer) int {
 
 	out := build.Collect(build.Input{
 		Cfg:         cfg,
+		FileToken:   fileToken,
 		JUnit:       report,
 		Debug:       debug,
 		ExitCode:    res.ExitCode,
@@ -149,7 +151,7 @@ func run(argv []string, stdout, errOut io.Writer) int {
 		}
 	}
 
-	path, err := writeReport(out.Report, cfg)
+	path, err := writeReport(out.Report, cfg, fileToken)
 	if err != nil {
 		fmt.Fprintf(errOut, "%s could not write the report: %v (maestro's output is kept in %s)\n", prefix, err, workDir)
 		return 1
@@ -229,7 +231,7 @@ func passthrough(maestroArgs []string, bin string, stdout, errOut io.Writer) int
 	return res.ExitCode
 }
 
-func writeReport(c wire.Collect, cfg config.Config) (string, error) {
+func writeReport(c wire.Collect, cfg config.Config, fileToken string) (string, error) {
 	if err := os.MkdirAll(cfg.OutputDir, 0o755); err != nil {
 		return "", err
 	}
@@ -237,7 +239,7 @@ func writeReport(c wire.Collect, cfg config.Config) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(cfg.OutputDir, fmt.Sprintf("qualflare-maestro-%d-%s.json", os.Getpid(), build.FileSafe(cfg.RunID)))
+	path := filepath.Join(cfg.OutputDir, fmt.Sprintf("qualflare-maestro-%s.json", fileToken))
 	return path, os.WriteFile(path, data, 0o644)
 }
 

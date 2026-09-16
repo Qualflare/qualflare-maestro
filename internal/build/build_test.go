@@ -196,6 +196,27 @@ func TestCollect_BundleScreenshotIsLinkedToItsStep(t *testing.T) {
 	}
 }
 
+func TestCollect_AttachmentNamesCarryTheFileToken(t *testing.T) {
+	in := load(t, bundle)
+	in.FileToken = "run-1-4242"
+	out := Collect(in)
+
+	var attachments int
+	for _, suite := range out.Report.Suites {
+		for _, cs := range suite.Cases {
+			for _, attachment := range cs.Attachments {
+				attachments++
+				if !strings.HasPrefix(attachment.LocalImagePath, "attachments/run-1-4242-") {
+					t.Errorf("LocalImagePath = %q, want file token prefix", attachment.LocalImagePath)
+				}
+			}
+		}
+	}
+	if attachments == 0 {
+		t.Fatal("bundle capture produced no attachments")
+	}
+}
+
 func TestCollect_BundleNestingSurvives(t *testing.T) {
 	nested := caseNamed(t, Collect(load(t, bundle)).Report, "Settings nested commands")
 	if nested.Steps[2].ParentIndex == nil || *nested.Steps[2].ParentIndex != 1 {

@@ -33,6 +33,7 @@ const (
 // Input is everything a report is built from.
 type Input struct {
 	Cfg         config.Config
+	FileToken   string
 	JUnit       *junit.Report
 	Debug       debugdir.Result
 	ExitCode    int
@@ -434,7 +435,11 @@ func (b *builder) attachments(f *debugdir.Flow, conv steps.Result) []wire.Attach
 			return
 		}
 		b.shots++
-		rel := fmt.Sprintf("attachments/%s-%d.png", FileSafe(b.in.Cfg.RunID), b.shots)
+		fileToken := b.in.FileToken
+		if fileToken == "" {
+			fileToken = FileSafe(b.in.Cfg.RunID)
+		}
+		rel := fmt.Sprintf("attachments/%s-%d.png", fileToken, b.shots)
 		b.out.Copies = append(b.out.Copies, Copy{From: path, To: rel})
 		out = append(out, wire.Attachment{
 			Name:           textutil.Truncate(filepath.Base(rel), 255),
