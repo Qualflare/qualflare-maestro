@@ -96,7 +96,7 @@ func run() int {
 		for _, f := range failures {
 			fmt.Println("FAIL", f)
 		}
-		fmt.Printf("%d check(s) failed -- not uploading a report that misrepresents the suite\n", len(failures))
+		fmt.Printf("%d check(s) failed -- the report does not match the flows; it is still uploaded, and this job fails\n", len(failures))
 		return 1
 	}
 	fmt.Printf("all checks passed (%d cases)\n", len(cases))

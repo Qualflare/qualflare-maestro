@@ -59,6 +59,10 @@ jobs:
         id: suite
         continue-on-error: true
         working-directory: e2e
+        env:
+          # Hosted runners are slow to start the XCTest driver; Maestro's default
+          # timeout has failed a run before any flow started.
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: '300000'
         run: |
           "$RUNNER_TEMP/qualflare-maestro" -output-dir e2e-results -environment production \
             -- maestro test --env DOGFOOD_LABEL=General flows/
