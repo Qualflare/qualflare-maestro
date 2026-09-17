@@ -1,6 +1,7 @@
 # qualflare-maestro
 
 [![CI](https://github.com/Qualflare/qualflare-maestro/actions/workflows/ci.yml/badge.svg)](https://github.com/Qualflare/qualflare-maestro/actions/workflows/ci.yml)
+[![Qualflare](https://api.qualflare.com/p/qualflare-maestro/badge.svg)](https://reports.qualflare.com/p/qualflare-maestro/launches)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 A native [Maestro](https://maestro.dev) reporter for [Qualflare](https://qualflare.com). It runs
@@ -108,6 +109,20 @@ variables are also replaced by `${NAME}` wherever they appear in the report. See
 ## Configuration
 
 Output directory, environment, platform and more: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+## Test reports
+
+This reporter is tested with itself. `e2e/` holds Maestro flows against the iOS Settings app — one
+carrying Qualflare metadata in its YAML, one nesting commands under `repeat`, `retry` and `runFlow`,
+and one with an optional command that misses — run through this reporter on a simulator and
+uploaded to Qualflare on every merge to `main` by the **published** `qualflare-cli`. The results
+below are that suite's, reported through the code this README documents:
+
+[![Qualflare](https://api.qualflare.com/p/qualflare-maestro/banner.svg)](https://reports.qualflare.com/p/qualflare-maestro/launches)
+
+Every flow there is meant to pass, so a red run is a real regression rather than a fixture failing
+on purpose. Failing flows, invalid YAML and a missing device are covered in `test/integration`,
+which is never uploaded.
 
 ## Known limitations
 
