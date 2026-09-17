@@ -18,3 +18,5 @@ All notable changes to this project are documented here. The format follows
 - Excludes Maestro's own settings and boolean values from redaction.
 - Qualifies case ids only when the same flow runs in more than one suite, keeping `--shard-split`
   ids stable.
+- Prunes `test/captures/` from the Go module with a nested `go.mod`: Maestro's failure screenshots
+  are named with an emoji, which the module zip format rejects, breaking `go install`.
