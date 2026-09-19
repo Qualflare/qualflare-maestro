@@ -27,6 +27,10 @@
 - **Maestro settings are not secrets.** `MAESTRO_CLI_*`, `MAESTRO_DRIVER_*`, `MAESTRO_USE_*`,
   `MAESTRO_DISABLE_*` and `MAESTRO_VERSION` are not treated as secrets. The values `true` and
   `false` are never replaced either.
+- **No JUnit file is left behind.** The reporter owns `--output` and removes its working directory once it
+  has read Maestro's results, so a run cannot also leave a JUnit XML file for something else to render —
+  GitLab's Tests tab, for instance. Run Maestro directly for that, and upload the XML with
+  `qf <project> collect <file> --format maestro`.
 - **Argument files are opaque.** Values passed inside a picocli `@argfile` are not seen by the
   reporter and are not protected.
 - **Unattributed errors use the log tail.** When Maestro exits without writing results, the report's
