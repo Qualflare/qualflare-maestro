@@ -46,21 +46,32 @@ recorded here rather than rediscovered each time.
   > tags and metadata from the flow's YAML, and a report even when a run dies
   > before Maestro writes one.
 
-- **Listings, with their dates and gates:**
+- **Listings, with their dates and gates** (PRs opened 2026-09-20):
   - `ludovicobesana/awesome-maestro` — the community list Maestro's own docs link
     to, section **Tools and Integrations**. No eligibility bar; BrowserStack is
-    already listed, so a vendor tool is in scope.
+    already listed, so a vendor tool is in scope. **PR #8.**
   - `mobile-dev-inc/maestro-docs` — the official community page,
     `resources/community/community-projects.md`, section **DevOps and CI/CD**
     (peers: a Fastlane plugin, Codemagic, a Slack results poster). Entries use
-    `* [Name](url): Description.` — colon, not dash.
+    `* [Name](url): Description.` — colon, not dash. **PR #204.**
+  - `ZoranPandovski/awesome-testing-tools` — **Mobile Testing Tools**, which
+    already lists Maestro. Merges monthly, and its contributing file asks for one
+    PR per suggestion, so a second PR alongside the older #116 is what it wants
+    rather than stacking. **PR #150.**
   - `vsouza/awesome-ios` — their CONTRIBUTING requires a repo **30+ days old**.
     This one was published 2026-09-18, so **not before 2026-10-18**; the list is
     Swift-library oriented, so weigh fit before spending the submission.
-  - `atinfo/awesome-test-automation` — `mobile-test-automation.md` (Maestro is
-    absent from it entirely). Two Qualflare PRs, #572 and #594, are already open
-    on a queue that has not moved in months: do not make it three without a
-    reason.
+  - `atinfo/awesome-test-automation` — `mobile-test-automation.md` under
+    **Continuous Integration** (Maestro is absent from the file entirely, which
+    the PR offers to fix separately). **PR #596**, alongside the older #572 and
+    #594 on a queue that has not moved in months.
+  - **Dead or wrong-fit, checked 2026-09-20 so nobody re-checks:**
+    `hotchemi/awesome-android-testing` is archived (last push 2021);
+    `jondot/awesome-react-native` has merged nothing since April 2021 despite
+    recent commits, so its 21 open PRs are decoration; `Solido/awesome-flutter`
+    takes only Dart/Flutter-specific packages, and this reporter behaves
+    identically for a native Android app; `matteocrippa/awesome-swift` is Swift
+    libraries only.
   - `TheJambo/awesome-testing` — **excluded.** Three PRs closed unmerged; the
     maintainer's bar is demonstrated usage, not persistence.
 - **Anything posted inside Maestro's own community** — the Slack at
