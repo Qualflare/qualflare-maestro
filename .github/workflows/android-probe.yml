@@ -1,0 +1,127 @@
+# One-off measurement, run by hand: what does Maestro's output look like on
+# Android?
+#
+# docs/LIMITATIONS.md has said "Only iOS has been measured. Android output is
+# expected to match, but has not been captured yet" since v0.1.0, and that
+# expectation is already known to be wrong in one place: Maestro names an
+# Android device after its AVD or its adb serial (DeviceService.kt,
+# listAndroidDevices), so `Pixel_7_API_34` and a physical device's serial both
+# reach the report with nothing in them that says "android" -- and the reporter
+# falls back to ios.
+#
+# This job captures the real thing so the fix is measured rather than guessed:
+# Maestro's own JUnit XML and debug output, plus the report the reporter builds
+# from them. Both land as artifacts; the useful parts get committed under
+# test/captures/ as fixtures, exactly as the iOS captures were.
+#
+# workflow_dispatch only: it boots an emulator, which is slow, and it proves
+# nothing on a normal push.
+name: Android probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      api-level:
+        description: Android API level to boot
+        default: "34"
+      maestro-version:
+        description: Maestro version, or "latest"
+        default: latest
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Capture Maestro output on Android
+    # ubuntu, not macos: the emulator needs KVM, which only the Linux runners have.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Maestro
+        run: |
+          if [ "${{ inputs.maestro-version }}" != "latest" ]; then
+            export MAESTRO_VERSION="${{ inputs.maestro-version }}"
+          fi
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - run: maestro --version
+
+      - name: Build the reporter
+        run: go build -o "$RUNNER_TEMP/qualflare-maestro" ./cmd/qualflare-maestro
+
+      # The emulator action's own README asks for this; without it the AVD boots
+      # without hardware acceleration and takes minutes per flow.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # Pinned by commit: this action runs arbitrary code in a job that checks
+      # out the repository, and a moving tag would change what that code is.
+      - name: Run the probe flows on an emulator
+        uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2.38.0
+        with:
+          api-level: ${{ inputs.api-level }}
+          arch: x86_64
+          target: google_apis
+          # A named AVD is the case that reads as iOS today, so name it rather
+          # than letting the action fall back to the emulator-NNNN serial.
+          avd-name: qualflare_probe_api${{ inputs.api-level }}
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            set -x
+            adb devices -l
+            adb shell getprop ro.build.version.release
+            adb -s emulator-5554 emu avd name || true
+
+            cd test/captures/android-probe
+            mkdir -p out
+
+            # 1. Maestro on its own, with exactly the flags the reporter owns, so
+            #    the capture is comparable to the iOS ones.
+            maestro test --format junit --output out/report.xml \
+              --debug-output out/debug --flatten-debug-output \
+              --env LABEL=Settings \
+              flows/ || echo "maestro exit=$? (a flow fails on purpose)"
+
+            # 2. The reporter over the same flows, to see what it makes of an
+            #    Android device string -- the platform field is the thing to read.
+            "$RUNNER_TEMP/qualflare-maestro" -output-dir out/qualflare-results \
+              -- maestro test --env LABEL=Settings flows/ \
+              || echo "reporter exit=$? (same failing flow)"
+
+            echo "--- what the reporter decided:"
+            python3 - <<'PY'
+            import glob, json
+            for f in sorted(glob.glob("out/qualflare-results/*.json")):
+                d = json.load(open(f))
+                print(f, "platform:", d.get("platform"), "framework:", d.get("framework"))
+                for s in d.get("suites", []):
+                    print("  suite:", s.get("name"), "| cases:", len(s.get("cases", [])))
+            PY
+
+      - name: Keep everything
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-probe-api${{ inputs.api-level }}
+          path: |
+            test/captures/android-probe/out/report.xml
+            test/captures/android-probe/out/debug/**
+            test/captures/android-probe/out/qualflare-results/**
+          retention-days: 14
+          if-no-files-found: warn

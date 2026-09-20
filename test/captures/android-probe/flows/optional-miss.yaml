@@ -1,0 +1,7 @@
+appId: com.android.settings
+name: Optional miss
+---
+- launchApp
+- tapOn:
+    text: "No Such Row 12345"
+    optional: true

@@ -1,0 +1,5 @@
+appId: com.android.settings
+name: Fails on purpose
+---
+- launchApp
+- assertVisible: "This Text Does Not Exist 12345"
