@@ -36,22 +36,45 @@ jobs:
       # builds a module zip, so only the rc caught it. This does, in one grep.
       - name: Paths are valid inside a Go module zip
         run: |
-          # A directory with its own go.mod is pruned from this module, so its
-          # paths are exempt -- that is exactly how test/captures/ keeps the
-          # emoji-named screenshots while `go install` still resolves.
-          # core.quotePath=false keeps a non-ASCII path readable and, more to the
-          # point, unquoted -- otherwise the prune filter below never matches it.
+          # `go install` broke at v0.1.0-rc.1: the module zip format allows only
+          # alphanumerics plus !#$%&()+,-.=@[]^_{}~ and space in a path element
+          # (golang.org/x/mod/module fileNameOK), and Maestro names a failure
+          # screenshot with an emoji. Nothing else in the gate builds a module
+          # zip, so only cutting the rc caught it.
+          #
+          # tr, not grep: the obvious bracket expression is a portability trap --
+          # GNU grep read `\]` as ending the class and then rejected the rest
+          # with "Invalid content of \{\}", which combined with `|| true` made
+          # this step pass without checking anything. Deleting every allowed
+          # character and seeing what is left needs no regex at all.
+          #
+          # core.quotePath=false keeps a non-ASCII path unquoted, so the prune
+          # filter below can match it.
           paths=$(git -c core.quotePath=false ls-files)
+          # A directory with its own go.mod is pruned from this module, so its
+          # paths are exempt -- that is how test/captures/ keeps the emoji-named
+          # screenshots while `go install` still resolves.
           for dir in $(git ls-files '*/go.mod' | xargs -r -n1 dirname); do
             paths=$(printf '%s\n' "$paths" | grep -v "^$dir/" || true)
           done
-          bad=$(printf '%s\n' "$paths" | LC_ALL=C grep -E '[^A-Za-z0-9!#$%&()+,./=@[\]^_{}~ -]' || true)
-          if [ -n "$bad" ]; then
-            echo "::error::these tracked paths cannot go in a module zip (golang.org/x/mod/module fileNameOK):"
-            echo "$bad"
-            echo "Move them under a directory with its own go.mod, as test/captures/ does."
+          # Via a file, not a heredoc or a pipe: an indented EOF would not
+          # terminate a heredoc, and a pipe would set `bad` inside a subshell.
+          printf '%s\n' "$paths" > module-paths.txt
+          bad=0
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            rest=$(printf '%s' "$path" | LC_ALL=C tr -d 'A-Za-z0-9!#$%&()+,./=@[]^_{}~ -')
+            if [ -n "$rest" ]; then
+              echo "::error::$path contains $rest, which a Go module zip rejects"
+              bad=1
+            fi
+          done < module-paths.txt
+          rm -f module-paths.txt
+          if [ "$bad" = 1 ]; then
+            echo "Move such files under a directory with its own go.mod, as test/captures/ does."
             exit 1
           fi
+          echo "checked $(printf '%s\n' "$paths" | grep -c . ) tracked path(s)"
 
   floor:
     name: Go 1.21 (module floor)
