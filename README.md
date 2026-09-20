@@ -142,6 +142,23 @@ go test -tags integration ./test/integration/ -run 'TestInvalidYAML|TestNoDevice
 go test -tags integration ./test/integration/ -run TestFlows -v                       # simulator booted
 ```
 
+## Related reporters
+
+Qualflare has a native reporter for each framework, all writing the same report format so
+one `qf collect` handles a polyglot repository:
+
+[jest](https://github.com/Qualflare/qualflare-jest) ·
+[vitest](https://github.com/Qualflare/qualflare-vitest) ·
+[mocha](https://github.com/Qualflare/qualflare-mocha) ·
+[cypress](https://github.com/Qualflare/qualflare-cypress) ·
+[playwright](https://github.com/Qualflare/qualflare-playwright) ·
+[cucumberjs](https://github.com/Qualflare/qualflare-cucumberjs) ·
+[pytest](https://github.com/Qualflare/qualflare-pytest) ·
+[testng](https://github.com/Qualflare/qualflare-testng) ·
+[junit5](https://github.com/Qualflare/qualflare-junit5) ·
+[go](https://github.com/Qualflare/qualflare-go) ·
+[cli](https://github.com/Qualflare/qualflare-cli)
+
 ## License
 
 Apache-2.0
