@@ -53,6 +53,25 @@ func (r *Redactor) String(s string) string {
 		return s
 	}
 
+	// Longer values claim their occurrences first, and a shorter value is never
+	// replaced inside or overlapping text a longer one already claimed -- so a
+	// value that ends where another begins cannot leave half of the longer one
+	// behind. r.pairs is sorted longest-first by New.
+	//
+	// `taken` is what keeps that check cheap: comparing each candidate against
+	// every existing claim was quadratic, and measured 30 ms for a 64 KiB tail in
+	// which a 4-character value recurred -- and quadratic in the count means the
+	// 256 KiB tail lastLines can produce was heading for half a second.
+	taken := make([]bool, len(s))
+	free := func(from, to int) bool {
+		for i := from; i < to; i++ {
+			if taken[i] {
+				return false
+			}
+		}
+		return true
+	}
+
 	type claim struct {
 		start, end int
 		key        string
@@ -66,14 +85,10 @@ func (r *Redactor) String(s string) string {
 			}
 			start := from + rel
 			end := start + len(p.Value)
-			overlaps := false
-			for _, claimed := range claims {
-				if start < claimed.end && end > claimed.start {
-					overlaps = true
-					break
+			if free(start, end) {
+				for i := start; i < end; i++ {
+					taken[i] = true
 				}
-			}
-			if !overlaps {
 				claims = append(claims, claim{start: start, end: end, key: p.Key})
 			}
 			from = end
