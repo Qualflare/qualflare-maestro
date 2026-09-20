@@ -66,8 +66,17 @@ type Flow struct {
 
 // Result is everything read from the directory.
 type Result struct {
-	Layout     Layout
-	Flows      []Flow
+	Layout Layout
+	Flows  []Flow
+	// Platform is "android", "ios" or "" -- what the bundle manifests attest to,
+	// not a guess. Maestro's JUnit `device` attribute cannot answer this: on
+	// Android it is the AVD name or the adb serial (DeviceService's
+	// listAndroidDevices sets description to `avdName ?: connection.serial`), so
+	// `qualflare_probe_api34` and `R5CT30ABCDE` are both normal, and neither says
+	// android. The manifests do, structurally: a DEVICE_LOG entry sourced from
+	// logcat exists only on Android, and one sourced from xctest only on Apple
+	// platforms. The flat 2.6.x layout writes no manifest, so it stays "".
+	Platform   string
 	MaestroLog string
 	Warnings   []string
 }
@@ -124,8 +133,49 @@ func Read(dir string) Result {
 	return res
 }
 
+// manifest is the subset of artifact-manifest/v1 that says which platform ran.
+type manifest struct {
+	Entries []struct {
+		Kind         string `json:"kind"`
+		RelativePath string `json:"relativePath"`
+		Metadata     struct {
+			Source string `json:"source"`
+		} `json:"metadata"`
+	} `json:"entries"`
+}
+
+// platformFromManifest reads one flow's manifest.json. An unreadable or absent
+// manifest is not a warning: it costs nothing but the hint, and -platform and the
+// device string still answer.
+func platformFromManifest(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var m manifest
+	if json.Unmarshal(data, &m) != nil {
+		return ""
+	}
+	for _, e := range m.Entries {
+		if !strings.EqualFold(e.Kind, "DEVICE_LOG") {
+			continue
+		}
+		hay := strings.ToLower(e.RelativePath + " " + e.Metadata.Source)
+		switch {
+		case strings.Contains(hay, "logcat"):
+			return "android"
+		case strings.Contains(hay, "xctest"), strings.Contains(hay, "simulator"):
+			return "ios"
+		}
+	}
+	return ""
+}
+
 func readBundle(res *Result, flowDir string) {
 	key := filepath.Base(flowDir)
+	if res.Platform == "" {
+		res.Platform = platformFromManifest(filepath.Join(flowDir, "manifest.json"))
+	}
 	entries, name, err := readEntries(filepath.Join(flowDir, "commands.json"), flowDir)
 	if err != nil {
 		res.Warnings = append(res.Warnings, unreadable(filepath.Join(flowDir, "commands.json"), err))

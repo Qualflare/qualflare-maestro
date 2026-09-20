@@ -197,3 +197,51 @@ func equalInts(a, b []int) bool {
 	}
 	return true
 }
+
+// The platform comes from the manifests, because Maestro's device attribute
+// cannot carry it: this capture's Android run reported device="qualflare_probe_api34",
+// which is just the AVD name.
+func TestRead_PlatformComesFromTheManifest(t *testing.T) {
+	for _, tc := range []struct {
+		capture string
+		want    string
+	}{
+		{"maestro-2.10.0-android14", "android"},
+		{"maestro-2.10.0-ios26.5", "ios"},
+		// The 2.6.x flat layout writes no manifest, so there is nothing to read
+		// and -platform or the device string has to answer.
+		{"maestro-2.6.1-ios26.5", ""},
+	} {
+		r := Read(captureDir(t, tc.capture, "debug"))
+		if r.Platform != tc.want {
+			t.Errorf("%s: Platform = %q, want %q", tc.capture, r.Platform, tc.want)
+		}
+	}
+}
+
+// A manifest that is missing, empty or malformed costs the hint and nothing else.
+func TestRead_UnreadableManifestIsNotAWarning(t *testing.T) {
+	dir := t.TempDir()
+	flow := filepath.Join(dir, "A flow")
+	if err := os.MkdirAll(flow, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(flow, "commands.json"), []byte(`[]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(flow, "manifest.json"), []byte(`{ not json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := Read(dir)
+	if r.Platform != "" {
+		t.Errorf("Platform = %q, want empty", r.Platform)
+	}
+	for _, w := range r.Warnings {
+		if strings.Contains(w, "manifest") {
+			t.Errorf("unexpected warning about the manifest: %q", w)
+		}
+	}
+	if r.Layout != LayoutBundle {
+		t.Errorf("Layout = %v, want bundle — a bad manifest must not change the layout", r.Layout)
+	}
+}

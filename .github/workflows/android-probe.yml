@@ -82,37 +82,9 @@ jobs:
           avd-name: qualflare_probe_api${{ inputs.api-level }}
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
-          script: |
-            set -x
-            adb devices -l
-            adb shell getprop ro.build.version.release
-            adb -s emulator-5554 emu avd name || true
-
-            cd test/captures/android-probe
-            mkdir -p out
-
-            # 1. Maestro on its own, with exactly the flags the reporter owns, so
-            #    the capture is comparable to the iOS ones.
-            maestro test --format junit --output out/report.xml \
-              --debug-output out/debug --flatten-debug-output \
-              --env LABEL=Settings \
-              flows/ || echo "maestro exit=$? (a flow fails on purpose)"
-
-            # 2. The reporter over the same flows, to see what it makes of an
-            #    Android device string -- the platform field is the thing to read.
-            "$RUNNER_TEMP/qualflare-maestro" -output-dir out/qualflare-results \
-              -- maestro test --env LABEL=Settings flows/ \
-              || echo "reporter exit=$? (same failing flow)"
-
-            echo "--- what the reporter decided:"
-            python3 - <<'PY'
-            import glob, json
-            for f in sorted(glob.glob("out/qualflare-results/*.json")):
-                d = json.load(open(f))
-                print(f, "platform:", d.get("platform"), "framework:", d.get("framework"))
-                for s in d.get("suites", []):
-                    print("  suite:", s.get("name"), "| cases:", len(s.get("cases", [])))
-            PY
+          # One line: the action runs each script line in its own `sh -c`, so
+          # anything multi-line belongs in a file. See probe.sh's header.
+          script: bash test/captures/android-probe/probe.sh
 
       - name: Keep everything
         if: always()

@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	flat   = "maestro-2.6.1-ios26.5"
-	bundle = "maestro-2.10.0-ios26.5"
+	flat    = "maestro-2.6.1-ios26.5"
+	bundle  = "maestro-2.10.0-ios26.5"
+	android = "maestro-2.10.0-android14"
 )
 
 // load builds an Input from a committed capture, as if maestro had just run
@@ -36,7 +37,7 @@ func load(t *testing.T, capture string) Input {
 		t.Fatal(err)
 	}
 	debug := root
-	if capture == bundle {
+	if capture == bundle || capture == android {
 		debug = filepath.Join(root, "debug")
 	}
 	return Input{
@@ -542,4 +543,56 @@ func countContaining(xs []string, sub string) int {
 		}
 	}
 	return n
+}
+
+// The whole reason the Android capture exists: its device attribute is
+// "qualflare_probe_api34", an AVD name, and before the manifest was read this
+// run reported platform ios. Measured on an API 34 emulator in CI, 2026-09-20.
+func TestCollect_AndroidRunReportsAndroid(t *testing.T) {
+	in := load(t, android)
+	if dev := in.JUnit.Suites[0].Device; dev != "qualflare_probe_api34" {
+		t.Fatalf("capture device = %q — this test is about that exact string", dev)
+	}
+	out := Collect(in)
+	if got := out.Report.Platform; got != "android" {
+		t.Errorf("platform = %q, want android", got)
+	}
+	for _, w := range out.Warnings {
+		if strings.Contains(w, "could not tell the platform") {
+			t.Errorf("warned about the platform even though the manifest said android: %q", w)
+		}
+	}
+	// The rest of the Android run should look like any other bundle run.
+	cases := out.Report.Suites[0].Cases
+	if len(cases) != 3 {
+		t.Fatalf("cases = %d, want 3", len(cases))
+	}
+	var withSteps, withAttachments int
+	for _, c := range cases {
+		if len(c.Steps) > 0 {
+			withSteps++
+		}
+		if len(c.Attachments) > 0 {
+			withAttachments++
+		}
+	}
+	if withSteps != 3 || withAttachments != 2 {
+		t.Errorf("cases with steps = %d (want 3), with attachments = %d (want 2)", withSteps, withAttachments)
+	}
+}
+
+// -platform still outranks the measurement, and the measurement outranks the
+// device string.
+func TestCollect_PlatformPrecedence(t *testing.T) {
+	in := load(t, android)
+	in.Cfg.Platform = "web"
+	if got := Collect(in).Report.Platform; got != "web" {
+		t.Errorf("platform = %q, want the explicit web", got)
+	}
+
+	in = load(t, android)
+	in.JUnit.Suites[0].Device = "iPhone 17 - iOS 26.5 - AAAA" // says ios, manifest says android
+	if got := Collect(in).Report.Platform; got != "android" {
+		t.Errorf("platform = %q, want android: the manifest is measured, the name is not", got)
+	}
 }

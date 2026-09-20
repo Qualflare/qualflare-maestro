@@ -39,7 +39,16 @@
   `maestro.bat` path in the arguments is not recognised as the binary.
 - **Shorthand reporter flags.** In shorthand form, a flag that is also a reporter flag, such as
   `-platform`, is taken by the reporter. Use the `--` form to pass it to Maestro.
-- **Platform detection** reads Maestro's device name. If it cannot tell, the report says `ios` and a
-  warning asks for `-platform`.
-- **Only iOS has been measured.** Android output is expected to match, but has not been captured yet.
+- **Platform detection** reads Maestro's debug output first: a per-flow `manifest.json` lists a
+  device log sourced from logcat on Android and from xctest on Apple platforms, which no naming
+  choice can break. Only if that is unavailable does it fall back to the device name, then to `ios`
+  with a warning asking for `-platform`.
+- **On the 2.6.x flat layout, Android needs `-platform android`.** That layout writes no manifest,
+  and Maestro names an Android device after its AVD or its adb serial — `Pixel_7_API_34`,
+  `R5CT30ABCDE` — so there is nothing to detect. A real iPhone is the same shape of problem: its
+  device string carries a bare version number rather than `iOS`, and only lands on `ios` because
+  that is the fallback.
+- **Android is measured on the 2.10 bundle layout only.** `test/captures/maestro-2.10.0-android14/`
+  is a real API 34 emulator run; the flows, steps, screenshots and layout match iOS. Android on
+  2.6.x, and any physical device, remain uncaptured.
 - **Screenshots need `qf` 0.1.24 or newer** to upload.
