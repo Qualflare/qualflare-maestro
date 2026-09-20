@@ -30,6 +30,29 @@ jobs:
       - run: GOOS=windows go vet ./...
       - run: go test -race ./...
 
+      # `go install` broke at v0.1.0-rc.1: the module zip format allows only
+      # alphanumerics plus !#$%&()+,-.=@[]^_{}~ and space in a path element, and
+      # Maestro names a failure screenshot with an emoji. Nothing in the gate
+      # builds a module zip, so only the rc caught it. This does, in one grep.
+      - name: Paths are valid inside a Go module zip
+        run: |
+          # A directory with its own go.mod is pruned from this module, so its
+          # paths are exempt -- that is exactly how test/captures/ keeps the
+          # emoji-named screenshots while `go install` still resolves.
+          # core.quotePath=false keeps a non-ASCII path readable and, more to the
+          # point, unquoted -- otherwise the prune filter below never matches it.
+          paths=$(git -c core.quotePath=false ls-files)
+          for dir in $(git ls-files '*/go.mod' | xargs -r -n1 dirname); do
+            paths=$(printf '%s\n' "$paths" | grep -v "^$dir/" || true)
+          done
+          bad=$(printf '%s\n' "$paths" | LC_ALL=C grep -E '[^A-Za-z0-9!#$%&()+,./=@[\]^_{}~ -]' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::these tracked paths cannot go in a module zip (golang.org/x/mod/module fileNameOK):"
+            echo "$bad"
+            echo "Move them under a directory with its own go.mod, as test/captures/ does."
+            exit 1
+          fi
+
   floor:
     name: Go 1.21 (module floor)
     needs: unit

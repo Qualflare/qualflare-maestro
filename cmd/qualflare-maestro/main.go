@@ -100,7 +100,7 @@ func run(argv []string, stdout, errOut io.Writer) int {
 		if raw == "" {
 			raw = os.Getenv("QUALFLARE_ENABLED")
 		}
-		if raw != "" && !disabledSpelling(raw) {
+		if raw != "" && !config.IsDisabledSpelling(raw) {
 			fmt.Fprintf(errOut, "%s -enabled/QUALFLARE_ENABLED value %q is not recognised; the reporter is disabled and Maestro will still run\n", prefix, raw)
 		}
 		return passthrough(maestroArgs, cfg.MaestroBin, stdout, errOut)
@@ -179,14 +179,6 @@ func run(argv []string, stdout, errOut io.Writer) int {
 	}
 	fmt.Fprintf(errOut, "%s wrote %d suite(s), %d case(s) to %s\n", prefix, len(out.Report.Suites), countCases(out.Report), path)
 	return res.ExitCode
-}
-
-func disabledSpelling(raw string) bool {
-	switch raw {
-	case "0", "false", "no", "off", "FALSE", "False", "Off", "No":
-		return true
-	}
-	return false
 }
 
 // unknownBeforeDoubleDash returns the first flag in front of a `--` that is not

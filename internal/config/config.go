@@ -120,6 +120,19 @@ func boolOr(raw string, def bool) bool {
 	}
 }
 
+// IsDisabledSpelling reports whether raw is a value a person plausibly meant as
+// "off". Every other non-empty value also disables the reporter -- boolOr's
+// default is false -- so main warns about the difference. The two lists live
+// here together because they are one vocabulary: kept apart, an edit to either
+// made the warning lie.
+func IsDisabledSpelling(raw string) bool {
+	switch raw {
+	case "0", "false", "no", "off", "FALSE", "False", "Off", "No":
+		return true
+	}
+	return false
+}
+
 func intOrNil(raw string) *int {
 	if raw == "" {
 		return nil
