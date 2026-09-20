@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="qualflare_probe_api34" tests="3" failures="1" time="49.951" timestamp="2026-09-20T15:19:07">
+    <testcase id="Passes" name="Passes" classname="Passes" file="flows/passes.yaml" time="11.479" timestamp="2026-09-20T15:19:07" status="SUCCESS">
+      <properties>
+        <property name="qualflare.priority" value="critical"/>
+        <property name="qualflare.label.team" value="mobile"/>
+        <property name="tags" value="probe"/>
+      </properties>
+    </testcase>
+    <testcase id="Fails on purpose" name="Fails on purpose" classname="Fails on purpose" file="flows/fails.yaml" time="24.523" timestamp="2026-09-20T15:19:19" status="ERROR">
+      <failure>Assertion is false: "This Text Does Not Exist 12345" is visible</failure>
+    </testcase>
+    <testcase id="Optional miss" name="Optional miss" classname="Optional miss" file="flows/optional-miss.yaml" time="13.924" timestamp="2026-09-20T15:19:43" status="SUCCESS"/>
+  </testsuite>
+</testsuites>

@@ -227,10 +227,17 @@ func (b *builder) platform(device string) string {
 	default:
 		b.warn("ignoring -platform %q: expected ios, android or web", b.in.Cfg.Platform)
 	}
+	// What Maestro's own debug output attests to, before anything inferred from a
+	// device name. On Android that name is the AVD name or the adb serial, so it
+	// says nothing about the platform -- measured on an API 34 emulator, which
+	// reported device="qualflare_probe_api34" and landed in the ios fallback.
+	if p := b.in.Debug.Platform; p != "" {
+		return p
+	}
 	if p := detectPlatform(device); p != "" {
 		return p
 	}
-	b.warn("could not tell the platform from the device %q; reporting %q, pass -platform to set it", device, FallbackPlatform)
+	b.warn("could not tell the platform from the device %q, and maestro's debug output did not say; reporting %q, pass -platform to set it", device, FallbackPlatform)
 	return FallbackPlatform
 }
 

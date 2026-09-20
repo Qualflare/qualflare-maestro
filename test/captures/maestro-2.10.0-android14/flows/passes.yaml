@@ -1,0 +1,12 @@
+# Android probe flows, deliberately independent of on-screen text: the Settings
+# app's labels differ between API levels, and this run exists to capture
+# Maestro's OUTPUT shape, not to test Android's UI.
+appId: com.android.settings
+name: Passes
+tags:
+  - probe
+properties:
+  qualflare.priority: critical
+  qualflare.label.team: mobile
+---
+- launchApp
